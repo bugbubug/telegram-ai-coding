@@ -21,6 +21,7 @@
 - Git 仓库使用 `WorkspaceManager` 创建独立 `git worktree`
 - 非 Git 目标路径自动回退为目录复制
 - 任务输出持久化到 SQLite 的 `task_logs`，`/logs` 直接读取历史表
+- Codex 任务默认只在完成时回传最终结果；若未提取到最终结果，提示用户使用 `/logs` 查看原始日志
 - `node-pty` 不可用时，终端层保留 `child_process.spawn` 回退
 - 本地运行采用受管单实例模式：PID、日志和健康状态写入 `.runtime/telegram-ai-manager/local/`
 - Redis 不可用时，任务队列自动降级为内存模式
@@ -55,10 +56,14 @@
 ### 5. 任务发布流是分步的
 
 - `/submit` 只在任务分支/worktree 上提交代码
+- `/submit` 默认作用于最近一条已完成任务；未显式传入 commit message 时，默认使用 `chore(task): submit <task_id>`
 - `/merge` 只在主仓库上执行 `git merge --ff-only task/<task_id>`
+- `/merge` 默认作用于最近一条可 merge 的 Git 任务
 - `/push` 只执行 `git push origin main`
+- `/push` 默认作用于最近一条可 push 的 Git 任务，且要求任务分支已经进入本地 `main`、仓库存在 `origin`
 - `/push` 成功后自动删除该任务的本地 worktree，并清空任务记录中的 `workspacePath`
-- 主仓库不在 `main`、有未提交改动、任务分支不存在或无法 fast-forward 时，发布流程必须直接阻断
+- 主仓库不在 `main`、有未提交改动、任务 worktree 有未提交改动、任务分支不存在或无法 fast-forward 时，发布流程必须直接阻断
+
 ### 6. 运行模式是“受管单实例”
 
 - 默认本地入口为 `pnpm dev`
@@ -89,6 +94,8 @@
 
 - 检查 `README.md`、`CLAUDE.md`、`AGENTS.md`、`.claude/` 与本文件描述是否一致
 - 检查命令清单、运行方式、仓库选择流程、workspace 生命周期是否写法一致
+- 检查 `/submit`、`/merge`、`/push` 的默认目标选择、阻断条件和 push 后清理语义是否写法一致
+- 检查 Codex “只回最终结果”与 `/logs` 回退说明是否写法一致
 
 ### 行为改动后
 

@@ -43,8 +43,9 @@ Telegram Bot UI 统一管理本机 Codex CLI 和 Claude Code CLI 终端会话。
 - 命令菜单由 `src/bot/bot.ts` 在启动时通过 `setMyCommands()` 注册
 - `/task`、`/codex`、`/claude` 的命令格式均支持 `[workspace::]prompt`
 - `/status` 需要展示当前已选仓库、活跃任务、worktree 路径、最近错误
-- Codex 任务默认不向 Telegram 流式推送中间过程，只在完成时返回最终结果和提交信息
-- `/submit`、`/merge`、`/push` 的默认目标是当前用户最近一条可执行任务；校验失败时必须明确返回阻断原因
+- Codex 任务默认不向 Telegram 流式推送中间过程，只在完成时返回最终结果；成功时还要附带 `task_id`、分支名、worktree 路径和 `/submit`、`/merge`、`/push` 提示，提取失败时明确引导使用 `/logs`
+- `/submit`、`/merge`、`/push` 的默认目标是当前用户最近一条可执行任务；`/submit` 允许追加 commit message，省略时默认使用 `chore(task): submit <task_id>`
+- `/submit`、`/merge`、`/push` 校验失败时必须明确返回阻断原因；`/push` 成功后只清理本地 worktree，不自动删除任务分支
 - `/clear`、`/clear all`、`/reset` 会清理消息记录、仓库选择和任务上下文，修改这些行为时必须补测试
 - 运行脚本：`pnpm dev`（受管后台启动）、`pnpm dev:watch`（裸 watch 调试）、`pnpm stop`、`pnpm status`
 
@@ -88,10 +89,11 @@ src/
 5. Git 仓库走 `git worktree add`，worktree 根位于 `WORKSPACE_BASE_DIR`
 6. 非 Git 目标路径回退为目录复制
 7. Agent 在隔离目录运行，输出写入 `task_logs`
-8. 成功任务保留 worktree，并向用户返回 `task_id`、分支名、worktree 路径，供 `/submit <task_id>`、`/merge <task_id>`、`/push <task_id>` 使用
-9. `/merge` 固定执行 `git merge --ff-only task/<task_id>`；主仓库不在 `main`、有未提交改动或无法 fast-forward 时必须阻断
-10. `/push` 固定执行 `git push origin main`；push 成功后清理任务 worktree 并清空持久化的 `workspacePath`，失败时不得提前清理
-11. 任务取消、失败或重启恢复后，状态和错误信息持久化到 SQLite，并清理对应 worktree / workspace
+8. 成功任务保留 worktree，并向用户返回 `task_id`、分支名、worktree 路径以及 `/submit <task_id>`、`/merge <task_id>`、`/push <task_id>` 下一步提示
+9. Codex 任务只在完成时回传最终结果；若未提取到最终结果，必须引导用户使用 `/logs <task_id>` 查看原始日志
+10. `/merge` 固定执行 `git merge --ff-only task/<task_id>`；主仓库不在 `main`、有未提交改动、任务 worktree 有脏改动或无法 fast-forward 时必须阻断
+11. `/push` 固定执行 `git push origin main`；只有任务分支已进入本地 `main` 且仓库存在 `origin` 时才允许执行，push 成功后清理任务 worktree 并清空持久化的 `workspacePath`，失败时不得提前清理
+12. 任务取消、失败或重启恢复后，状态和错误信息持久化到 SQLite，并清理对应 worktree / workspace
 
 ## 本地运行约束
 
@@ -110,7 +112,7 @@ src/
 - `AGENTS.md`：Codex / Agent 执行规则
 - `docs/mvp-implementation-plan.md`：当前实现状态、运行约束和文档闭环范围
 - `.claude/agents/*.md`：架构审查、代码审查、测试审查标准
-- `.claude/commands/*.md`：计划、预检、同步和插件开发命令说明
+- `.claude/commands/*.md`：计划、预检、同步和插件开发命令说明，需覆盖发布流与 Codex 最终回包约束
 - `src/plugins/CLAUDE.md`：插件开发约束（命令注册、测试、文档同步）
 
 ## Git 规范

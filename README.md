@@ -48,7 +48,7 @@ pnpm build && pnpm start
 - 任务状态和历史输出持久化到 SQLite，`/logs` 支持查看历史输出
 - Redis 不可用时，任务队列自动降级为内存模式
 - `node-pty` 启动失败时，终端层会自动回退到 `child_process.spawn`
-- Codex 任务默认不回传中间过程，只在完成时返回最终结果、task id、分支和 worktree 信息
+- Codex 任务默认不回传中间过程，只在完成时返回最终结果、task id、分支、worktree 信息和下一步 `/submit`、`/merge`、`/push` 提示；若未提取到最终输出，则引导使用 `/logs`
 - `/clear`、`/clear all`、`/reset` 用于清理机器人消息、仓库选择和活跃任务上下文
 - 本地运行改为单实例受管模式：`pnpm dev` 会清理旧进程、写入 PID/日志、检查 readiness
 - 运行状态通过本地健康端口暴露，默认只监听 `127.0.0.1:43117`
@@ -106,6 +106,14 @@ pnpm build && pnpm start
 | `/reset` | 清空消息、取消活跃任务并重置当前会话 |
 
 说明：`/task`、`/codex`、`/claude` 支持两步输入，可以先发命令，再把下一条文本作为任务内容；若未选择仓库，则默认回退到 `DEFAULT_WORKSPACE_SOURCE_PATH`；使用 `workspace::prompt` 可直接指定任意本地目录。`/submit` 默认提交最近一条已完成任务，也支持在命令后追加自定义 commit message；`/merge` 和 `/push` 默认选择最近一条可执行的 Git 任务。
+
+### 发布流程 / Publishing Flow
+
+- `/submit [task_id] [message]`：默认选择当前用户最近一条已完成任务；未传 message 时，提交信息默认为 `chore(task): submit <task_id>`
+- `/merge [task_id]`：默认选择最近一条可 merge 的 Git 任务，只允许把 `task/<task_id>` fast-forward 合并到本地 `main`
+- `/push [task_id]`：默认选择最近一条可 push 的 Git 任务，要求任务分支已经进入本地 `main`，并且仓库存在 `origin`
+- `/push` 成功后只清理该任务的本地 worktree，并将任务记录里的 `workspacePath` 置空；任务分支默认保留，方便后续排查或人工处理
+- 只要主仓库不在 `main`、主仓库有脏改动、任务 worktree 仍有未提交改动、任务分支不存在或无法 fast-forward，发布流程都会直接阻断并返回原因
 
 ---
 
