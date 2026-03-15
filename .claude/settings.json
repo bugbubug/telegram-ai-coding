@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm *)",
+      "Bash(npx vitest *)",
+      "Bash(git *)",
+      "Bash(tsx *)",
+      "Bash(node *)",
+      "Bash(mkdir *)",
+      "Bash(cat *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Read",
+      "Write",
+      "Grep",
+      "Glob"
+    ],
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(sudo *)",
+      "Bash(curl * | bash)",
+      "Bash(wget * | bash)"
+    ]
+  }
+}

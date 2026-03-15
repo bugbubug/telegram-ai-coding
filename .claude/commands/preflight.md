@@ -1,0 +1,10 @@
+在提交代码前执行完整的预检查：
+
+1. `pnpm typecheck` — 类型检查
+2. `pnpm lint` — 代码规范
+3. `pnpm test` — 单元测试
+4. 检查是否有 console.log 残留（应使用 pino logger）
+5. 检查是否有未处理的 TODO 或 FIXME
+6. 检查 import 是否有循环依赖
+
+报告所有问题并给出修复建议。

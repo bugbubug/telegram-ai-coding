@@ -1,0 +1,18 @@
+# Codex CLI 项目级配置
+# 与 AGENTS.md 配合使用
+
+[model]
+# 默认模型（按需调整）
+# model = "gpt-5.3-codex"
+
+[sandbox]
+# 允许写入 workspace 目录
+# writable_roots = ["./workspaces", "./src", "./tests"]
+
+[features]
+# shell_snapshot = true
+# fast_mode = true
+
+[project]
+# AGENTS.md 最大读取字节数
+# project_doc_max_bytes = 32768
