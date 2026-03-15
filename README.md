@@ -49,6 +49,7 @@ pnpm build && pnpm start
 - Redis 不可用时，任务队列自动降级为内存模式
 - `node-pty` 启动失败时，终端层会自动回退到 `child_process.spawn`
 - Codex 任务默认不回传中间过程，只在完成时返回最终结果、task id、分支、worktree 信息和下一步 `/submit`、`/merge`、`/push` 提示；若未提取到最终输出，则引导使用 `/logs`
+- `/merge`、`/push` 除了保留文本命令，也会在 Telegram 中提供可点击按钮；按钮采用“先确认、再执行”的交互
 - `/clear`、`/clear all`、`/reset` 用于清理机器人消息、仓库选择和活跃任务上下文
 - 本地运行改为单实例受管模式：`pnpm dev` 会清理旧进程、写入 PID/日志、检查 readiness
 - 运行状态通过本地健康端口暴露，默认只监听 `127.0.0.1:43117`
@@ -99,13 +100,13 @@ pnpm build && pnpm start
 | `/logs [task_id]` | 查看最近任务或指定任务的历史输出 |
 | `/cancel [task_id]` | 取消排队中或运行中的任务 |
 | `/submit [task_id] [message]` | 提交最近完成任务或指定任务的本地分支 |
-| `/merge [task_id]` | 将最近完成任务或指定任务的分支 fast-forward 合并到本地 `main` |
-| `/push [task_id]` | 将本地 `main` 推送到 `origin/main`，成功后自动清理任务 worktree |
+| `/merge [task_id]` | 将最近完成任务或指定任务的分支 fast-forward 合并到本地 `main`，也支持按钮确认后执行 |
+| `/push [task_id]` | 将本地 `main` 推送到 `origin/main`，成功后自动清理任务 worktree，也支持按钮确认后执行 |
 | `/clear` | 清空当前聊天中的机器人消息并重置仓库选择 |
 | `/clear all` | 清空机器人消息并取消当前用户的活跃任务 |
 | `/reset` | 清空消息、取消活跃任务并重置当前会话 |
 
-说明：`/task`、`/codex`、`/claude` 支持两步输入，可以先发命令，再把下一条文本作为任务内容；若未选择仓库，则默认回退到 `DEFAULT_WORKSPACE_SOURCE_PATH`；使用 `workspace::prompt` 可直接指定任意本地目录。`/submit` 默认提交最近一条已完成任务，也支持在命令后追加自定义 commit message；`/merge` 和 `/push` 默认选择最近一条可执行的 Git 任务。
+说明：`/task`、`/codex`、`/claude` 支持两步输入，可以先发命令，再把下一条文本作为任务内容；若未选择仓库，则默认回退到 `DEFAULT_WORKSPACE_SOURCE_PATH`；使用 `workspace::prompt` 可直接指定任意本地目录。`/submit` 默认提交最近一条已完成任务，也支持在命令后追加自定义 commit message；`/merge` 和 `/push` 默认选择最近一条可执行的 Git 任务，并支持 Telegram 按钮确认后执行。
 
 ### 发布流程 / Publishing Flow
 

@@ -39,9 +39,11 @@ describe("registerSubmitCommand", () => {
 
     expect(findLatestTaskIdForAction).toHaveBeenCalledWith(1, "submit");
     expect(submitTask).toHaveBeenCalledWith("task-1", 1, "");
-    expect(reply).toHaveBeenCalledWith(
-      "已提交本地分支 task-1\n分支：task/task-1\n提交：abc123\nWorktree：/tmp/task-1\n下一步：/merge task-1",
+    expect(reply).toHaveBeenNthCalledWith(
+      1,
+      "已提交本地分支 task-1\n分支：task/task-1\n提交：abc123\nWorktree：/tmp/task-1\n下一步：可点击下方按钮继续合并",
     );
+    expect(reply).toHaveBeenNthCalledWith(2, "发布操作：", expect.any(Object));
   });
 
   it("uses an explicit task id and custom message", async () => {
@@ -78,8 +80,10 @@ describe("registerSubmitCommand", () => {
     });
 
     expect(submitTask).toHaveBeenCalledWith("task-2", 8, "release commit");
-    expect(reply).toHaveBeenCalledWith(
-      "当前没有新的未提交更改 task-2\n分支：task/task-2\n提交：def456\nWorktree：/tmp/task-2\n下一步：/merge task-2",
+    expect(reply).toHaveBeenNthCalledWith(
+      1,
+      "当前没有新的未提交更改 task-2\n分支：task/task-2\n提交：def456\nWorktree：/tmp/task-2\n下一步：可点击下方按钮继续合并",
     );
+    expect(reply).toHaveBeenNthCalledWith(2, "发布操作：", expect.any(Object));
   });
 });

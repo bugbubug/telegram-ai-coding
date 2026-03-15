@@ -1,7 +1,12 @@
 import type { Bot } from "grammy";
 
 import type { TaskPublisher } from "../../services/task/task-publisher.js";
-import { extractSingleTaskId, resolveTaskIdForAction } from "./publish-command-utils.js";
+import {
+  buildActionKeyboard,
+  extractSingleTaskId,
+  formatMergeReply,
+  resolveTaskIdForAction,
+} from "./publish-command-utils.js";
 import { replyChunked } from "./task.js";
 
 export const registerMergeCommand = (
@@ -17,16 +22,9 @@ export const registerMergeCommand = (
       "merge",
     );
     const result = await taskPublisher.mergeTask(taskId, ctx.from?.id ?? 0);
-    const actionLine = result.merged ? "已合并到本地 main" : "任务分支已在本地 main 中";
-
-    await replyChunked(
-      ctx,
-      [
-        `${actionLine} ${result.task.id}`,
-        `分支：${result.branchName}`,
-        `本地 main：${result.commitHash}`,
-        `下一步：/push ${result.task.id}`,
-      ].join("\n"),
-    );
+    await replyChunked(ctx, formatMergeReply(result));
+    await ctx.reply("发布操作：", {
+      reply_markup: buildActionKeyboard("push", result.task.id),
+    });
   });
 };

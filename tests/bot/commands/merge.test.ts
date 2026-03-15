@@ -36,9 +36,11 @@ describe("registerMergeCommand", () => {
 
     expect(findLatestTaskIdForAction).toHaveBeenCalledWith(1, "merge");
     expect(mergeTask).toHaveBeenCalledWith("task-1", 1);
-    expect(reply).toHaveBeenCalledWith(
-      "已合并到本地 main task-1\n分支：task/task-1\n本地 main：abc123\n下一步：/push task-1",
+    expect(reply).toHaveBeenNthCalledWith(
+      1,
+      "已合并到本地 main task-1\n分支：task/task-1\n本地 main：abc123\n下一步：可点击下方按钮继续推送",
     );
+    expect(reply).toHaveBeenNthCalledWith(2, "发布操作：", expect.any(Object));
   });
 
   it("shows an idempotent message when the task branch is already merged", async () => {
@@ -70,8 +72,10 @@ describe("registerMergeCommand", () => {
       reply,
     });
 
-    expect(reply).toHaveBeenCalledWith(
-      "任务分支已在本地 main 中 task-2\n分支：task/task-2\n本地 main：def456\n下一步：/push task-2",
+    expect(reply).toHaveBeenNthCalledWith(
+      1,
+      "任务分支已在本地 main 中 task-2\n分支：task/task-2\n本地 main：def456\n下一步：可点击下方按钮继续推送",
     );
+    expect(reply).toHaveBeenNthCalledWith(2, "发布操作：", expect.any(Object));
   });
 });

@@ -20,7 +20,7 @@ model: sonnet
 - `WorkspaceManager` 的 `git worktree` 创建、残留 worktree 重建、清理和非 Git 回退
 - `TaskRunner` 的日志持久化、重启恢复、取消逻辑，以及成功任务保留 workspace / 失败任务回收
 - Codex 最终回包提取逻辑，以及未提取到最终结果时的 `/logs` 引导
-- `/submit`、`/merge`、`/push` 的分步发布逻辑、默认目标解析、阻断条件和返回信息
+- `/submit`、`/merge`、`/push` 的分步发布逻辑、默认目标解析、阻断条件、按钮确认交互和返回信息
 - `/clear`、`/clear all`、`/reset` 的消息清理和任务取消
 - `setMyCommands()` 对内置命令和插件命令的注册
 - `node-pty` 不可用时的终端回退

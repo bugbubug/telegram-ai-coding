@@ -123,8 +123,38 @@ const getMeaningfulLogs = (logs: TaskLogEntry[]): string[] =>
     .map((entry) => stripAnsiCodes(entry.content).replace(/\r/g, "").trim())
     .filter((content) => content.length > 0);
 
+const extractReplyAfterTokensUsed = (content: string): string => {
+  const tokenMarker = content.lastIndexOf("\ntokens used\n");
+  const startsWithTokenMarker = content.startsWith("tokens used\n");
+  if (tokenMarker < 0 && !startsWithTokenMarker) {
+    return "";
+  }
+
+  const tail = content.slice(
+    startsWithTokenMarker ? "tokens used\n".length : tokenMarker + "\ntokens used\n".length,
+  );
+  const tailLines = tail
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  const firstTextLineIndex = tailLines.findIndex((line) => !/^[\d,]+$/u.test(line));
+  if (firstTextLineIndex < 0) {
+    return "";
+  }
+
+  return tailLines.slice(firstTextLineIndex).join("\n").trim();
+};
+
 export const extractCodexFinalReply = (logs: TaskLogEntry[]): string => {
   const meaningfulLogs = getMeaningfulLogs(logs);
+  const finalChunk = [...meaningfulLogs]
+    .reverse()
+    .map((content) => extractReplyAfterTokensUsed(content))
+    .find((content) => content.length > 0);
+  if (finalChunk) {
+    return finalChunk;
+  }
+
   const codexChunk = [...meaningfulLogs]
     .reverse()
     .find((content) => /(?:^|\n)codex\n/u.test(content));
@@ -142,18 +172,9 @@ export const extractCodexFinalReply = (logs: TaskLogEntry[]): string => {
     output = output.slice("codex\n".length);
   }
 
-  const tokenMarker = output.lastIndexOf("\ntokens used\n");
-  if (tokenMarker >= 0) {
-    const tail = output.slice(tokenMarker + "\ntokens used\n".length);
-    const tailLines = tail
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-    const firstTextLineIndex = tailLines.findIndex((line) => !/^[\d,]+$/u.test(line));
-    if (firstTextLineIndex >= 0) {
-      return tailLines.slice(firstTextLineIndex).join("\n").trim();
-    }
-    output = output.slice(0, tokenMarker);
+  const inlineFinalChunk = extractReplyAfterTokensUsed(output);
+  if (inlineFinalChunk) {
+    return inlineFinalChunk;
   }
 
   return output.trim();
@@ -203,6 +224,25 @@ const formatTaskCompletionReply = async (
   return lines.join("\n");
 };
 
+const sendTaskActionButtons = async (ctx: Context, task: Task): Promise<void> => {
+  if (!task.workspacePath) {
+    return;
+  }
+
+  try {
+    await fs.access(path.join(task.workspacePath, ".git"));
+    await ctx.reply("发布操作：", {
+      reply_markup: new InlineKeyboard()
+        .text("查看日志", `logs:${task.id}`)
+        .row()
+        .text("合并到 main", `publish:prompt:merge:${task.id}`)
+        .text("推送到 origin/main", `publish:prompt:push:${task.id}`),
+    });
+  } catch {
+    // Non-git workspace has no publish actions.
+  }
+};
+
 const bindTaskNotifications = (
   ctx: Context,
   eventBus: EventBusLike,
@@ -250,6 +290,7 @@ const bindTaskNotifications = (
         sendQueue = sendQueue
           .then(async () => {
             await replyChunked(ctx, await formatTaskCompletionReply(taskStore, task));
+            await sendTaskActionButtons(ctx, task);
           })
           .catch((error: unknown) => {
             logger.error({ error, taskId }, "Failed to send task completion reply");

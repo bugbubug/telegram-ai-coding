@@ -18,6 +18,7 @@
 - `RepositorySelectionStore` 保存用户当前选中的仓库
 - `TaskRunner` 负责排队、执行、取消、恢复和日志持久化
 - `TaskPublisher` 负责任务分支提交、本地 `main` 合并、远端推送和 push 后 worktree 清理
+- 发布动作除文本命令外，还支持 Telegram 按钮触发；`/merge`、`/push` 按钮需要先确认再执行
 - Git 仓库使用 `WorkspaceManager` 创建独立 `git worktree`
 - 非 Git 目标路径自动回退为目录复制
 - 任务输出持久化到 SQLite 的 `task_logs`，`/logs` 直接读取历史表

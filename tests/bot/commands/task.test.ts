@@ -175,4 +175,26 @@ describe("parseTaskInput", () => {
       ]),
     ).toBe("最终总结");
   });
+
+  it("prefers the latest completion chunk over earlier verbose codex logs", () => {
+    expect(
+      extractCodexFinalReply([
+        {
+          id: "1",
+          taskId: "task-2",
+          seq: 89,
+          content: "thinking\nverbose details\ncodex\nPlan update\nlarge diff block",
+          createdAt: "2026-03-16T00:00:00.000Z",
+        },
+        {
+          id: "2",
+          taskId: "task-2",
+          seq: 100,
+          content:
+            "tokens used\n128,924\n**Done**\n- 已把最近两次功能改动的文档语义补齐\n- 用户文档已经同步",
+          createdAt: "2026-03-16T00:00:01.000Z",
+        },
+      ]),
+    ).toBe("**Done**\n- 已把最近两次功能改动的文档语义补齐\n- 用户文档已经同步");
+  });
 });

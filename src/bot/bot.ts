@@ -112,6 +112,7 @@ export const createBot = (options: CreateBotOptions): Bot => {
   registerCallbackQueryHandler(
     bot,
     options.taskStore,
+    options.taskPublisher,
     options.taskRunner,
     options.repositoryCatalog,
     options.repositorySelectionStore,
