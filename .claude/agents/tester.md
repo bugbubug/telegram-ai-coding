@@ -16,6 +16,7 @@ model: sonnet
 必须覆盖的高风险链路：
 
 - `/repos` 仓库选择和当前用户状态保存
+- `/task`、`/codex`、`/claude` 的 `workspace::prompt` 与默认路径回退
 - `WorkspaceManager` 的 `git worktree` 创建、清理和非 Git 回退
 - `TaskRunner` 的日志持久化、重启恢复、取消逻辑
 - `/clear`、`/clear all`、`/reset` 的消息清理和任务取消

@@ -25,7 +25,9 @@ Telegram Bot UI 统一管理本机 Codex CLI 和 Claude Code CLI 终端会话。
 - Agent 适配器通过 `AgentAdapter` 接口编程，新增 Agent 只需实现接口
 - 事件驱动：所有跨模块通信走 `EventBus`，类型约束 `EventMap`
 - 每个任务分配隔离 workspace；Git 仓库优先用 `git worktree`，非 Git 目录才复制
-- 用户先通过 `/repos` 选择仓库，再创建 `/task`、`/codex`、`/claude` 任务
+- `/repos` 只列出 `DEFAULT_WORKSPACE_SOURCE_PATH` 下可识别的 Git 仓库
+- 用户通常先通过 `/repos` 选择仓库，再创建 `/task`、`/codex`、`/claude` 任务；若未选择仓库，则回退到 `DEFAULT_WORKSPACE_SOURCE_PATH`
+- `/task`、`/codex`、`/claude` 支持 `workspace::prompt` 显式覆盖目标路径
 - `task_logs` 持久化任务输出，`/logs` 读取历史日志而不是进程内缓存
 - `WORKSPACE_BASE_DIR` 必须位于源仓库目录外部，避免自我复制和路径污染
 - 本地 runtime 默认通过 `RUNTIME_HEALTH_HOST` / `RUNTIME_HEALTH_PORT` 提供 readiness 检查
@@ -36,6 +38,7 @@ Telegram Bot UI 统一管理本机 Codex CLI 和 Claude Code CLI 终端会话。
 - 内置命令：`/start`、`/repos`、`/task`、`/status`、`/logs`、`/cancel`、`/clear`、`/reset`
 - 插件命令：`/codex`、`/claude`
 - 命令菜单由 `src/bot/bot.ts` 在启动时通过 `setMyCommands()` 注册
+- `/task`、`/codex`、`/claude` 的命令格式均支持 `[workspace::]prompt`
 - `/status` 需要展示当前已选仓库、活跃任务、worktree 路径、最近错误
 - `/clear`、`/clear all`、`/reset` 会清理消息记录、仓库选择和任务上下文，修改这些行为时必须补测试
 - 运行脚本：`pnpm dev`（受管后台启动）、`pnpm dev:watch`（裸 watch 调试）、`pnpm stop`、`pnpm status`
@@ -75,10 +78,12 @@ src/
 
 1. 用户先选仓库：`RepositoryCatalog` 扫描 `DEFAULT_WORKSPACE_SOURCE_PATH`
 2. `RepositorySelectionStore` 记录 `userId -> repoPath`
-3. 创建任务时，`TaskRunner` 调用 `WorkspaceManager.prepareWorkspace()`
-4. Git 仓库走 `git worktree add`，worktree 根位于 `WORKSPACE_BASE_DIR`
-5. Agent 在隔离目录运行，输出写入 `task_logs`
-6. 任务结束、取消或失败后，状态和错误信息持久化到 SQLite
+3. `/repos` 仅返回 Git 仓库；未选择仓库时，任务默认落到 `DEFAULT_WORKSPACE_SOURCE_PATH`
+4. 创建任务时，`TaskRunner` 调用 `WorkspaceManager.prepareWorkspace()`
+5. Git 仓库走 `git worktree add`，worktree 根位于 `WORKSPACE_BASE_DIR`
+6. 非 Git 目标路径回退为目录复制
+7. Agent 在隔离目录运行，输出写入 `task_logs`
+8. 任务结束、取消或失败后，状态和错误信息持久化到 SQLite
 
 ## 本地运行约束
 
@@ -95,6 +100,7 @@ src/
 - `README.md`：用户可见功能、启动方式、命令清单、运行流程
 - `CLAUDE.md`：架构约束、交互面、开发规则
 - `AGENTS.md`：Codex / Agent 执行规则
+- `docs/mvp-implementation-plan.md`：当前实现状态、运行约束和文档闭环范围
 - `.claude/agents/*.md`：架构审查、代码审查、测试审查标准
 - `.claude/commands/*.md`：计划、预检、同步和插件开发命令说明
 - `src/plugins/CLAUDE.md`：插件开发约束（命令注册、测试、文档同步）
@@ -113,7 +119,7 @@ pnpm install          # 安装依赖
 pnpm dev              # 受管后台启动本地实例
 pnpm dev:watch        # 原始 tsx watch 调试模式
 pnpm build            # TypeScript 编译
-pnpm start            # 受管方式启动 dist
+pnpm start            # 受管方式启动 dist（先执行 pnpm build）
 pnpm stop             # 停止当前本地实例
 pnpm status           # 查看 PID / readiness / 日志
 pnpm test             # 运行测试
@@ -127,6 +133,7 @@ pnpm typecheck        # tsc --noEmit
 - 不要在插件中直接操作 Bot 实例，通过 PluginContext / commandRegistry 注册
 - 不要在 service 层引入 Telegram 相关类型，保持传输层无关
 - Redis 连接失败时队列应降级为内存模式
+- `REDIS_URL` 仍属于必填配置项；自动降级仅覆盖 Redis 服务不可用场景
 - `node-pty` 失败时必须保持 `child_process.spawn` 回退链路可用
 - 不要把 `WORKSPACE_BASE_DIR` 配到源仓库内部
 - 不要在本地同时运行多个 bot 实例

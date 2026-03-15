@@ -32,7 +32,7 @@ pnpm build && pnpm start
 
 ## 相关文档 / Documents
 
-- [MVP 全量实现计划](docs/mvp-implementation-plan.md)
+- [MVP 实现状态与文档闭环清单](docs/mvp-implementation-plan.md)
 - [Claude Code 协作规范](CLAUDE.md)
 - [Codex / Agent 协作规范](AGENTS.md)
 
@@ -41,8 +41,9 @@ pnpm build && pnpm start
 ## 当前能力 / Current Capabilities
 
 - Telegram 命令菜单会在启动时自动注册：`/start`、`/repos`、`/task`、`/status`、`/logs`、`/cancel`、`/clear`、`/reset`、`/codex`、`/claude`
-- 用户先通过 `/repos` 选择 `DEFAULT_WORKSPACE_SOURCE_PATH` 下的仓库，再发送任务 prompt
-- Git 仓库默认使用独立 `git worktree` 隔离任务；非 Git 目录才回退为目录复制
+- `/repos` 会列出 `DEFAULT_WORKSPACE_SOURCE_PATH` 下可识别的 Git 仓库；选中后，后续 `/task`、`/codex`、`/claude` 和自由文本默认作用于该仓库
+- 若当前未选择仓库，`/task`、`/codex`、`/claude` 会回退使用 `DEFAULT_WORKSPACE_SOURCE_PATH`；也支持通过 `workspace::prompt` 显式指定目标路径
+- Git 仓库默认使用独立 `git worktree` 隔离任务；只有当任务目标路径本身不是 Git 目录时，才回退为目录复制
 - 任务状态和历史输出持久化到 SQLite，`/logs` 支持查看历史输出
 - Redis 不可用时，任务队列自动降级为内存模式
 - `node-pty` 启动失败时，终端层会自动回退到 `child_process.spawn`
@@ -55,11 +56,12 @@ pnpm build && pnpm start
 ## 交互流程 / Runtime Flow
 
 1. 通过 `/repos` 列出 `DEFAULT_WORKSPACE_SOURCE_PATH` 下的 Git 仓库并选择目标仓库
-2. 使用 `/codex <prompt>`、`/claude <prompt>`、`/task <prompt>` 或直接发送文本创建任务
-3. `TaskRunner` 为每个任务创建独立工作目录
-4. Git 仓库走 `git worktree`，目录路径固定在仓库外部的 `WORKSPACE_BASE_DIR`
-5. Agent 在隔离 worktree 中运行，输出经过 ANSI 清理、防抖和 4096 字符分片后推送到 Telegram
-6. 使用 `/status`、`/logs`、`/cancel`、`/clear`、`/reset` 管理当前会话
+2. 使用 `/codex [workspace::]prompt`、`/claude [workspace::]prompt`、`/task [workspace::]prompt` 或直接发送文本创建任务
+3. 若未选择仓库，则任务默认回退到 `DEFAULT_WORKSPACE_SOURCE_PATH`；若使用 `workspace::prompt`，则以显式路径为准
+4. `TaskRunner` 为每个任务创建独立工作目录
+5. Git 仓库走 `git worktree`，目录路径固定在仓库外部的 `WORKSPACE_BASE_DIR`；非 Git 目录回退为目录复制
+6. Agent 在隔离 worktree 中运行，输出经过 ANSI 清理、防抖和 4096 字符分片后推送到 Telegram
+7. 使用 `/status`、`/logs`、`/cancel`、`/clear`、`/reset` 管理当前会话
 
 ---
 
@@ -67,10 +69,12 @@ pnpm build && pnpm start
 
 - `pnpm dev`：受管后台启动本地实例，自动清理旧 PID 和旧 bot 进程
 - `pnpm dev:watch`：保留原始 `tsx watch` 调试模式，不建议作为日常本地测试默认入口
-- `pnpm start`：受管方式启动 `dist/index.js`
+- `pnpm start`：受管方式启动 `dist/index.js`，通常先执行 `pnpm build`
 - `pnpm stop`：优雅停止当前项目实例，必要时清理僵尸进程
 - `pnpm status`：显示 PID、日志路径和健康检查地址
 - 运行时文件统一放在 `.runtime/telegram-ai-manager/local/`
+- SQLite 默认文件路径：`data/tasks.db`
+- 运行时状态文件：`.runtime/telegram-ai-manager/local/state/health.env`
 - 默认健康检查地址：`http://127.0.0.1:43117/healthz`
 - 默认日志路径：`.runtime/telegram-ai-manager/local/logs/app.log`
 
@@ -81,10 +85,10 @@ pnpm build && pnpm start
 | 命令 | 说明 |
 |------|------|
 | `/start` | 显示欢迎信息和命令列表 |
-| `/repos` | 列出并选择 `DEFAULT_WORKSPACE_SOURCE_PATH` 下的仓库 |
-| `/task <prompt>` | 在当前已选仓库中创建默认 Agent 任务 |
-| `/codex <prompt>` | 在当前已选仓库中创建 Codex CLI 任务 |
-| `/claude <prompt>` | 在当前已选仓库中创建 Claude Code CLI 任务 |
+| `/repos` | 列出并选择 `DEFAULT_WORKSPACE_SOURCE_PATH` 下的 Git 仓库 |
+| `/task [workspace::]prompt` | 在当前已选仓库中创建默认 Agent 任务，也可显式覆盖路径 |
+| `/codex [workspace::]prompt` | 在当前已选仓库中创建 Codex CLI 任务，也可显式覆盖路径 |
+| `/claude [workspace::]prompt` | 在当前已选仓库中创建 Claude Code CLI 任务，也可显式覆盖路径 |
 | `/status` | 查看当前已选仓库、活跃任务、worktree 路径和最近错误 |
 | `/logs [task_id]` | 查看最近任务或指定任务的历史输出 |
 | `/cancel [task_id]` | 取消排队中或运行中的任务 |
@@ -92,7 +96,7 @@ pnpm build && pnpm start
 | `/clear all` | 清空机器人消息并取消当前用户的活跃任务 |
 | `/reset` | 清空消息、取消活跃任务并重置当前会话 |
 
-说明：`/task`、`/codex`、`/claude` 支持两步输入，可以先发命令，再把下一条文本作为任务内容。
+说明：`/task`、`/codex`、`/claude` 支持两步输入，可以先发命令，再把下一条文本作为任务内容；若未选择仓库，则默认回退到 `DEFAULT_WORKSPACE_SOURCE_PATH`；使用 `workspace::prompt` 可直接指定任意本地目录。
 
 ---
 
@@ -149,11 +153,11 @@ data/              # SQLite 数据目录（gitignored）
 
 ## 环境变量要点 / Environment Notes
 
-- `DEFAULT_WORKSPACE_SOURCE_PATH`：Telegram `/repos` 扫描仓库的根目录
+- `DEFAULT_WORKSPACE_SOURCE_PATH`：Telegram `/repos` 扫描 Git 仓库的根目录；未选择仓库时也是任务默认目标路径
 - `WORKSPACE_BASE_DIR`：任务 worktree 根目录，必须放在源仓库目录外部
 - `TELEGRAM_ALLOWED_USERS`：允许访问 bot 的 Telegram 数字 user id 列表
 - `CODEX_CLI_PATH`、`CLAUDE_CODE_CLI_PATH`：本机 CLI 可执行路径
-- `REDIS_URL`：可选；未配置或不可用时自动降级为内存队列
+- `REDIS_URL`：配置项必填；Redis 服务不可用时自动降级为内存队列
 - `RUNTIME_HEALTH_HOST`、`RUNTIME_HEALTH_PORT`：本地健康检查地址，默认 `127.0.0.1:43117`
 
 ---

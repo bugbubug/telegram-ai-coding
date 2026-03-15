@@ -13,7 +13,8 @@ model: sonnet
 4. 边界情况：Telegram 消息长度、PTY 进程超时、Redis 连接中断、`node-pty` 回退 `child_process`
 5. 运行链路：仓库选择、`git worktree` 创建与清理、`/clear` / `/reset` 行为是否正确
 6. 安全：是否有硬编码密钥、不安全的 eval、未校验的用户输入、是否把 worktree 建在源仓库内部
-7. 文档闭环：用户可见命令、运行方式、协作规则变化后，`README.md`、`CLAUDE.md`、`AGENTS.md`、`.claude/` 是否同步更新
+7. 文档闭环：用户可见命令、运行方式、协作规则变化后，`README.md`、`CLAUDE.md`、`AGENTS.md`、`docs/mvp-implementation-plan.md`、`.claude/` 是否同步更新
+8. 文档语义：`/repos` 的 Git-only 行为、`workspace::prompt` 和默认路径回退是否写清楚
 
 输出格式：
 - 发现的问题列表（附文件路径和行号）

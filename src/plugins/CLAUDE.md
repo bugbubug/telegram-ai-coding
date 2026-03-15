@@ -8,7 +8,7 @@
 4. 插件不应直接 import 其他插件的内部文件
 5. 使用 EventBus 进行跨插件通信
 6. 为新增命令补充测试，并确认命令描述会进入 Telegram 命令菜单
-7. 插件行为变化时，同步更新 `README.md`、`CLAUDE.md`、`AGENTS.md` 和相关 `.claude/` 文档
+7. 插件行为变化时，同步更新 `README.md`、`CLAUDE.md`、`AGENTS.md`、`docs/mvp-implementation-plan.md` 和相关 `.claude/` 文档
 
 ## 文件结构
 
