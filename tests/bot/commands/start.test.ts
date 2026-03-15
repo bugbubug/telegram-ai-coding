@@ -25,6 +25,8 @@ describe("formatStartReply", () => {
     expect(reply).toContain("当前已选仓库：telegram-ai-coding");
     expect(reply).toContain("仓库路径：/Users/bugbubug/Desktop/codex-project/telegram-ai-coding");
     expect(reply).toContain("/submit [task_id] [message] - 提交已完成任务的本地分支");
+    expect(reply).toContain("/merge [task_id] - 合并任务分支到本地 main");
+    expect(reply).toContain("/push [task_id] - 推送本地 main 并清理任务 worktree");
     expect(reply).toContain("1. /repos 选择仓库");
     expect(reply).toContain("2. /codex 或 /claude");
     expect(reply).toContain("3. 再发送下一条文本作为任务内容");

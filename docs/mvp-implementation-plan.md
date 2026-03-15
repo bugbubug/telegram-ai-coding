@@ -12,11 +12,12 @@
 
 ## 当前 MVP 已交付能力
 
-- Telegram Bot 命令面：`/start`、`/repos`、`/task`、`/status`、`/logs`、`/cancel`、`/clear`、`/reset`、`/codex`、`/claude`
+- Telegram Bot 命令面：`/start`、`/repos`、`/task`、`/status`、`/logs`、`/cancel`、`/submit`、`/merge`、`/push`、`/clear`、`/reset`、`/codex`、`/claude`
 - 启动时自动执行 `setMyCommands()` 注册命令菜单
 - `RepositoryCatalog` 扫描 `DEFAULT_WORKSPACE_SOURCE_PATH` 下的 Git 仓库供 `/repos` 选择
 - `RepositorySelectionStore` 保存用户当前选中的仓库
 - `TaskRunner` 负责排队、执行、取消、恢复和日志持久化
+- `TaskPublisher` 负责任务分支提交、本地 `main` 合并、远端推送和 push 后 worktree 清理
 - Git 仓库使用 `WorkspaceManager` 创建独立 `git worktree`
 - 非 Git 目标路径自动回退为目录复制
 - 任务输出持久化到 SQLite 的 `task_logs`，`/logs` 直接读取历史表
@@ -51,7 +52,14 @@
 - 目标路径不是 Git 仓库：复制目录到 `WORKSPACE_BASE_DIR/<taskId>`
 - `WORKSPACE_BASE_DIR` 必须位于源仓库目录外部
 
-### 5. 运行模式是“受管单实例”
+### 5. 任务发布流是分步的
+
+- `/submit` 只在任务分支/worktree 上提交代码
+- `/merge` 只在主仓库上执行 `git merge --ff-only task/<task_id>`
+- `/push` 只执行 `git push origin main`
+- `/push` 成功后自动删除该任务的本地 worktree，并清空任务记录中的 `workspacePath`
+- 主仓库不在 `main`、有未提交改动、任务分支不存在或无法 fast-forward 时，发布流程必须直接阻断
+### 6. 运行模式是“受管单实例”
 
 - 默认本地入口为 `pnpm dev`
 - 生产产物入口为 `pnpm build && pnpm start`
@@ -96,6 +104,7 @@
 - `git worktree` / 非 Git 回退策略
 - SQLite 路径、runtime 路径、PID / 日志 / 健康端口
 - Redis 降级策略、任务生命周期或日志持久化方式
+- `/submit`、`/merge`、`/push` 的发布语义与 worktree 清理规则
 - 插件注册方式、命令菜单注册方式、协作规范
 
 ## 当前仍为占位的部分

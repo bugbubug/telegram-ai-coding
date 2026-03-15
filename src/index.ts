@@ -10,10 +10,10 @@ import { createRuntimeHealthServer } from "./runtime/health-server.js";
 import { AgentRegistry } from "./services/agent/agent-registry.js";
 import { ClaudeCodeAgent } from "./services/agent/claude-code-agent.js";
 import { CodexAgent } from "./services/agent/codex-agent.js";
+import { TaskPublisher } from "./services/task/task-publisher.js";
 import { TaskQueue } from "./services/task/task-queue.js";
 import { TaskRunner } from "./services/task/task-runner.js";
 import { TaskStore } from "./services/task/task-store.js";
-import { TaskSubmitter } from "./services/task/task-submitter.js";
 import { TerminalManager } from "./services/terminal/terminal-manager.js";
 import { RepositoryCatalog } from "./services/workspace/repository-catalog.js";
 import { WorkspaceManager } from "./services/workspace/workspace-manager.js";
@@ -42,7 +42,7 @@ const bootstrap = async (): Promise<void> => {
     config.GIT_BRANCH_ISOLATION,
   );
   const taskStore = new TaskStore();
-  const taskSubmitter = new TaskSubmitter(taskStore);
+  const taskPublisher = new TaskPublisher(taskStore, workspaceManager);
   const taskQueue = await TaskQueue.create(
     config.REDIS_URL,
     config.TASK_CONCURRENCY,
@@ -71,7 +71,7 @@ const bootstrap = async (): Promise<void> => {
   services.register(ServiceNames.repositoryCatalog, repositoryCatalog);
   services.register(ServiceNames.workspaceManager, workspaceManager);
   services.register(ServiceNames.taskStore, taskStore);
-  services.register(ServiceNames.taskSubmitter, taskSubmitter);
+  services.register(ServiceNames.taskPublisher, taskPublisher);
   services.register(ServiceNames.taskQueue, taskQueue);
   services.register(ServiceNames.taskRunner, taskRunner);
   services.register(ServiceNames.pluginManager, pluginManager);
@@ -107,7 +107,7 @@ const bootstrap = async (): Promise<void> => {
     logger: appLogger,
     eventBus,
     taskStore,
-    taskSubmitter,
+    taskPublisher,
     taskQueue,
     taskRunner,
     agentRegistry,

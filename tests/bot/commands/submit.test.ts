@@ -15,6 +15,7 @@ describe("registerSubmitCommand", () => {
       commitHash: "abc123",
       committed: true,
     }));
+    const findLatestTaskIdForAction = vi.fn(() => Promise.resolve("task-1"));
 
     const bot = {
       command(command: string, handler: (ctx: unknown) => Promise<void>) {
@@ -25,9 +26,7 @@ describe("registerSubmitCommand", () => {
     registerSubmitCommand(
       bot,
       {
-        listTasksByUser: vi.fn(() => [{ id: "task-1" }]),
-      } as never,
-      {
+        findLatestTaskIdForAction,
         submitTask,
       } as never,
     );
@@ -38,9 +37,10 @@ describe("registerSubmitCommand", () => {
       reply,
     });
 
+    expect(findLatestTaskIdForAction).toHaveBeenCalledWith(1, "submit");
     expect(submitTask).toHaveBeenCalledWith("task-1", 1, "");
     expect(reply).toHaveBeenCalledWith(
-      "已提交本地分支 task-1\n分支：task/task-1\n提交：abc123\nWorktree：/tmp/task-1",
+      "已提交本地分支 task-1\n分支：task/task-1\n提交：abc123\nWorktree：/tmp/task-1\n下一步：/merge task-1",
     );
   });
 
@@ -65,9 +65,7 @@ describe("registerSubmitCommand", () => {
     registerSubmitCommand(
       bot,
       {
-        listTasksByUser: vi.fn(() => []),
-      } as never,
-      {
+        findLatestTaskIdForAction: vi.fn(),
         submitTask,
       } as never,
     );
@@ -81,7 +79,7 @@ describe("registerSubmitCommand", () => {
 
     expect(submitTask).toHaveBeenCalledWith("task-2", 8, "release commit");
     expect(reply).toHaveBeenCalledWith(
-      "当前没有新的未提交更改 task-2\n分支：task/task-2\n提交：def456\nWorktree：/tmp/task-2",
+      "当前没有新的未提交更改 task-2\n分支：task/task-2\n提交：def456\nWorktree：/tmp/task-2\n下一步：/merge task-2",
     );
   });
 });

@@ -32,6 +32,8 @@ export const formatStartReply = (
     "/logs [task_id] - 查看最近日志",
     "/cancel [task_id] - 取消任务",
     "/submit [task_id] [message] - 提交已完成任务的本地分支",
+    "/merge [task_id] - 合并任务分支到本地 main",
+    "/push [task_id] - 推送本地 main 并清理任务 worktree",
     "/clear - 清空当前聊天中的机器人消息并重置仓库选择",
     "/clear all - 清空消息并取消当前活跃任务",
     "/reset - 重置当前会话",

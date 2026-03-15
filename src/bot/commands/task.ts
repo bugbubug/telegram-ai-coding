@@ -171,6 +171,8 @@ const formatTaskSubmissionHint = async (task: Task): Promise<string[]> => {
     if (branchName) {
       lines.push(`分支：${branchName}`);
       lines.push(`提交：/submit ${task.id}`);
+      lines.push(`合并：/merge ${task.id}`);
+      lines.push(`推送：/push ${task.id}`);
     }
   } catch {
     // Non-git workspace keeps only the path.

@@ -106,4 +106,29 @@ describe("WorkspaceManager", () => {
     expect(workspace.branchName).toBeUndefined();
     await expect(fs.readFile(path.join(workspace.path, "notes.txt"), "utf8")).resolves.toBe("copy me");
   });
+
+  it("can remove a retained worktree without deleting the task branch", async () => {
+    const sourceDir = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-retained-source-"));
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-retained-base-"));
+    tempDirs.push(sourceDir, baseDir);
+
+    await execFile("git", ["init", "-b", "main"], { cwd: sourceDir });
+    await execFile("git", ["config", "user.email", "codex@example.com"], { cwd: sourceDir });
+    await execFile("git", ["config", "user.name", "Codex"], { cwd: sourceDir });
+    await fs.writeFile(path.join(sourceDir, "README.md"), "hello");
+    await execFile("git", ["add", "."], { cwd: sourceDir });
+    await execFile("git", ["commit", "-m", "init"], { cwd: sourceDir });
+
+    const manager = new WorkspaceManager(baseDir, true);
+    const workspace = await manager.prepareWorkspace(createTask(sourceDir, "task-retained"));
+    const result = await manager.cleanupRetainedWorkspace(workspace);
+
+    expect(result.status).toBe("removed");
+    await expect(fs.access(workspace.path)).rejects.toThrow();
+
+    const branchHead = await execFile("git", ["rev-parse", "--verify", "task/task-retained"], {
+      cwd: sourceDir,
+    });
+    expect(branchHead.stdout.trim()).toMatch(/^[a-f0-9]{40}$/u);
+  });
 });

@@ -18,6 +18,9 @@ export const isGitRepo = async (cwd: string): Promise<boolean> => {
   }
 };
 
+export const getRepositoryRoot = async (cwd: string): Promise<string> =>
+  runGit(cwd, ["rev-parse", "--show-toplevel"]);
+
 export const getCurrentBranch = async (cwd: string): Promise<string> =>
   runGit(cwd, ["branch", "--show-current"]);
 
@@ -44,6 +47,39 @@ export const commitAllChanges = async (cwd: string, message: string): Promise<vo
 
 export const getHeadCommit = async (cwd: string): Promise<string> =>
   runGit(cwd, ["rev-parse", "HEAD"]);
+
+export const getHeadCommitForRef = async (cwd: string, ref: string): Promise<string> =>
+  runGit(cwd, ["rev-parse", ref]);
+
+export const isAncestorCommit = async (
+  cwd: string,
+  ancestorRef: string,
+  descendantRef: string,
+): Promise<boolean> => {
+  try {
+    await runGit(cwd, ["merge-base", "--is-ancestor", ancestorRef, descendantRef]);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const mergeBranchFastForward = async (cwd: string, branchName: string): Promise<void> => {
+  await runGit(cwd, ["merge", "--ff-only", branchName]);
+};
+
+export const hasRemote = async (cwd: string, remoteName: string): Promise<boolean> => {
+  try {
+    await runGit(cwd, ["remote", "get-url", remoteName]);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const pushBranch = async (cwd: string, remoteName: string, branchName: string): Promise<void> => {
+  await runGit(cwd, ["push", remoteName, branchName]);
+};
 
 export const addWorktree = async (
   repoPath: string,

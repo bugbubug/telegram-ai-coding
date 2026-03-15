@@ -40,11 +40,11 @@ pnpm build && pnpm start
 
 ## 当前能力 / Current Capabilities
 
-- Telegram 命令菜单会在启动时自动注册：`/start`、`/repos`、`/task`、`/status`、`/logs`、`/cancel`、`/submit`、`/clear`、`/reset`、`/codex`、`/claude`
+- Telegram 命令菜单会在启动时自动注册：`/start`、`/repos`、`/task`、`/status`、`/logs`、`/cancel`、`/submit`、`/merge`、`/push`、`/clear`、`/reset`、`/codex`、`/claude`
 - `/repos` 会列出 `DEFAULT_WORKSPACE_SOURCE_PATH` 下可识别的 Git 仓库；选中后，后续 `/task`、`/codex`、`/claude` 和自由文本默认作用于该仓库
 - 若当前未选择仓库，`/task`、`/codex`、`/claude` 会回退使用 `DEFAULT_WORKSPACE_SOURCE_PATH`；也支持通过 `workspace::prompt` 显式指定目标路径
 - Git 仓库默认使用独立 `git worktree` 隔离任务；非 Git 目录才回退为目录复制
-- 任务重试前会自动清理同 task id 的残留 worktree 注册；失败、取消或重启恢复后的 worktree 会自动回收，成功任务会保留 worktree 以便后续提交
+- 任务重试前会自动清理同 task id 的残留 worktree 注册；失败、取消或重启恢复后的 worktree 会自动回收，成功任务会保留 worktree 以便后续 `/submit`、`/merge`、`/push`
 - 任务状态和历史输出持久化到 SQLite，`/logs` 支持查看历史输出
 - Redis 不可用时，任务队列自动降级为内存模式
 - `node-pty` 启动失败时，终端层会自动回退到 `child_process.spawn`
@@ -63,9 +63,11 @@ pnpm build && pnpm start
 4. `TaskRunner` 为每个任务创建独立工作目录
 5. Git 仓库走 `git worktree`，目录路径固定在仓库外部的 `WORKSPACE_BASE_DIR`；非 Git 目录回退为目录复制
 6. Agent 在隔离 worktree 中运行；Codex 默认只在完成后回传最终结果，其他输出仍会写入任务日志并遵守 ANSI 清理、去抖和 4096 字符分片约束
-7. 成功任务保留 worktree 并返回 `task_id`、分支名、worktree 路径，可通过 `/submit <task_id>` 自动提交本地分支
-8. 失败、取消或重启恢复后的任务自动清理对应 worktree，避免残留分支占用
-9. 使用 `/status`、`/logs`、`/cancel`、`/submit`、`/clear`、`/reset` 管理当前会话
+7. 成功任务保留 worktree 并返回 `task_id`、分支名、worktree 路径，可通过 `/submit <task_id>` 提交任务分支，再用 `/merge <task_id>` 合入本地 `main`
+8. `/push <task_id>` 会把本地 `main` 推到 `origin/main`；push 成功后自动删除该任务的本地 worktree，并返回清理结果
+9. `/merge` 和 `/push` 只做安全校验后的分步发布，不自动 rebase、不强制 merge；主仓库不在 `main`、有脏改动或无法 fast-forward 时会直接阻断
+10. 失败、取消或重启恢复后的任务自动清理对应 worktree，避免残留分支占用
+11. 使用 `/status`、`/logs`、`/cancel`、`/submit`、`/merge`、`/push`、`/clear`、`/reset` 管理当前会话
 
 ---
 
@@ -97,11 +99,13 @@ pnpm build && pnpm start
 | `/logs [task_id]` | 查看最近任务或指定任务的历史输出 |
 | `/cancel [task_id]` | 取消排队中或运行中的任务 |
 | `/submit [task_id] [message]` | 提交最近完成任务或指定任务的本地分支 |
+| `/merge [task_id]` | 将最近完成任务或指定任务的分支 fast-forward 合并到本地 `main` |
+| `/push [task_id]` | 将本地 `main` 推送到 `origin/main`，成功后自动清理任务 worktree |
 | `/clear` | 清空当前聊天中的机器人消息并重置仓库选择 |
 | `/clear all` | 清空机器人消息并取消当前用户的活跃任务 |
 | `/reset` | 清空消息、取消活跃任务并重置当前会话 |
 
-说明：`/task`、`/codex`、`/claude` 支持两步输入，可以先发命令，再把下一条文本作为任务内容；若未选择仓库，则默认回退到 `DEFAULT_WORKSPACE_SOURCE_PATH`；使用 `workspace::prompt` 可直接指定任意本地目录。`/submit` 默认提交最近一条已完成任务，也支持在命令后追加自定义 commit message。
+说明：`/task`、`/codex`、`/claude` 支持两步输入，可以先发命令，再把下一条文本作为任务内容；若未选择仓库，则默认回退到 `DEFAULT_WORKSPACE_SOURCE_PATH`；使用 `workspace::prompt` 可直接指定任意本地目录。`/submit` 默认提交最近一条已完成任务，也支持在命令后追加自定义 commit message；`/merge` 和 `/push` 默认选择最近一条可执行的 Git 任务。
 
 ---
 

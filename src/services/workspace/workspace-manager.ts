@@ -13,6 +13,11 @@ import {
   removeWorktree,
 } from "./git-utils.js";
 
+export interface WorkspaceCleanupResult {
+  status: "removed" | "missing" | "failed";
+  message: string;
+}
+
 const ensureWithinBaseDir = (baseDir: string, targetPath: string): void => {
   const relative = path.relative(baseDir, targetPath);
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
@@ -50,18 +55,71 @@ export class WorkspaceManager {
     };
   }
 
-  public async cleanup(workspace: Workspace | string): Promise<void> {
+  public async cleanup(
+    workspace: Workspace | string,
+    options?: { deleteBranch?: boolean },
+  ): Promise<void> {
     const workspacePath = typeof workspace === "string" ? workspace : workspace.path;
     ensureWithinBaseDir(this.baseDir, workspacePath);
     if (typeof workspace !== "string" && workspace.branchName && (await isGitRepo(workspace.sourcePath))) {
       await removeWorktree(workspace.sourcePath, workspacePath);
-      if (this.gitBranchIsolation) {
+      if (options?.deleteBranch ?? this.gitBranchIsolation) {
         await deleteBranch(workspace.sourcePath, workspace.branchName);
       }
       return;
     }
 
     await fs.rm(workspacePath, { recursive: true, force: true });
+  }
+
+  public async cleanupRetainedWorkspace(workspace: Workspace): Promise<WorkspaceCleanupResult> {
+    ensureWithinBaseDir(this.baseDir, workspace.path);
+
+    if (workspace.branchName && (await isGitRepo(workspace.sourcePath))) {
+      await pruneWorktrees(workspace.sourcePath);
+      const existingWorktrees = await listWorktrees(workspace.sourcePath);
+      const normalizedWorkspacePath = path.resolve(workspace.path);
+      const hasRegisteredWorktree = existingWorktrees.some(
+        (entry) => entry.path === normalizedWorkspacePath,
+      );
+
+      if (!hasRegisteredWorktree) {
+        try {
+          await fs.access(normalizedWorkspacePath);
+          await fs.rm(normalizedWorkspacePath, { recursive: true, force: true });
+          return {
+            status: "removed",
+            message: "任务 worktree 已删除",
+          };
+        } catch {
+          return {
+            status: "missing",
+            message: "worktree 已不存在，无需清理",
+          };
+        }
+      }
+
+      await removeWorktree(workspace.sourcePath, workspace.path);
+      return {
+        status: "removed",
+        message: "任务 worktree 已删除",
+      };
+    }
+
+    try {
+      await fs.access(workspace.path);
+    } catch {
+      return {
+        status: "missing",
+        message: "worktree 已不存在，无需清理",
+      };
+    }
+
+    await fs.rm(workspace.path, { recursive: true, force: true });
+    return {
+      status: "removed",
+      message: "任务 worktree 已删除",
+    };
   }
 
   private async cleanupExistingGitWorkspace(

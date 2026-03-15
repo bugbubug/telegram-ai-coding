@@ -167,7 +167,7 @@ export class TaskStore {
     return this.getTask(id);
   }
 
-  public updateWorkspacePath(id: string, workspacePath: string): Task {
+  public updateWorkspacePath(id: string, workspacePath: string | null): Task {
     this.updateWorkspacePathStatement.run({
       id,
       workspace_path: workspacePath,

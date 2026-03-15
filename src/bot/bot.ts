@@ -5,10 +5,12 @@ import type { AppConfig } from "../config/index.js";
 import type { CommandRegistry, EventBusLike, LoggerLike } from "../core/types.js";
 import type { ITaskQueue } from "../services/task/task-queue.js";
 import type { AgentRegistry } from "../services/agent/agent-registry.js";
+import type { TaskPublisher } from "../services/task/task-publisher.js";
 import type { TaskRunner } from "../services/task/task-runner.js";
 import type { TaskStore } from "../services/task/task-store.js";
-import type { TaskSubmitter } from "../services/task/task-submitter.js";
 import type { RepositoryCatalog } from "../services/workspace/repository-catalog.js";
+import { registerMergeCommand } from "./commands/merge.js";
+import { registerPushCommand } from "./commands/push.js";
 import { createTaskMessageHandler, registerReposCommand, registerTaskCommand } from "./commands/task.js";
 import { registerStartCommand } from "./commands/start.js";
 import { registerStatusCommand } from "./commands/status.js";
@@ -31,7 +33,7 @@ interface CreateBotOptions {
   logger: LoggerLike;
   eventBus: EventBusLike;
   taskStore: TaskStore;
-  taskSubmitter: TaskSubmitter;
+  taskPublisher: TaskPublisher;
   taskQueue: ITaskQueue;
   taskRunner: TaskRunner;
   agentRegistry: AgentRegistry;
@@ -53,6 +55,8 @@ export const buildBotCommands = (commandRegistry: CommandRegistry): BotCommand[]
   { command: "logs", description: "查看任务最近日志" },
   { command: "cancel", description: "取消排队中或运行中的任务" },
   { command: "submit", description: "提交已完成任务的本地分支" },
+  { command: "merge", description: "合并任务分支到本地 main" },
+  { command: "push", description: "推送本地 main 并清理任务 worktree" },
   { command: "clear", description: "清空当前聊天中的机器人消息" },
   { command: "reset", description: "重置当前会话并取消活跃任务" },
   ...commandRegistry.listAgentCommands().map((command) => ({
@@ -86,7 +90,9 @@ export const createBot = (options: CreateBotOptions): Bot => {
   registerStatusCommand(bot, options.taskStore, options.repositorySelectionStore);
   registerLogsCommand(bot, options.taskStore);
   registerCancelCommand(bot, options.taskRunner, options.taskStore);
-  registerSubmitCommand(bot, options.taskStore, options.taskSubmitter);
+  registerSubmitCommand(bot, options.taskPublisher);
+  registerMergeCommand(bot, options.taskPublisher);
+  registerPushCommand(bot, options.taskPublisher);
   registerClearCommand(
     bot,
     options.messageHistoryStore,
