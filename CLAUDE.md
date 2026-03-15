@@ -4,13 +4,15 @@
 
 Telegram Bot UI 统一管理本机 Codex CLI 和 Claude Code CLI 终端会话。
 采用服务解耦 + 插件化架构，为后续多 Agent 编排预留扩展点。
+当前 MVP 已实现仓库选择、任务排队、历史日志持久化、`git worktree` 隔离和 Telegram 命令菜单注册。
+本地运行已切换到受管单实例模式，默认使用 `.runtime/telegram-ai-manager/local/` 存放 PID、日志和状态。
 
 ## 技术栈
 
 - Runtime: Node.js 20+ / TypeScript 5.5+ (strict mode)
 - Telegram: grammY
-- 终端桥接: node-pty
-- 任务队列: BullMQ + Redis
+- 终端桥接: node-pty（失败时自动回退 `child_process.spawn`）
+- 任务队列: BullMQ + Redis（失败时降级为 InMemory）
 - 存储: SQLite (better-sqlite3)
 - 日志: pino
 - 测试: vitest
@@ -19,10 +21,24 @@ Telegram Bot UI 统一管理本机 Codex CLI 和 Claude Code CLI 终端会话。
 ## 关键架构决策
 
 - 所有模块通过 `core/service-registry.ts` 做依赖注入，禁止跨模块直接 import 实现
-- 插件通过 `PluginContext` 接口注册，不直接耦合主进程
+- 插件通过 `PluginContext` + `commandRegistry` 注册命令，不直接耦合 Telegram `Bot`
 - Agent 适配器通过 `AgentAdapter` 接口编程，新增 Agent 只需实现接口
 - 事件驱动：所有跨模块通信走 `EventBus`，类型约束 `EventMap`
-- 每个任务分配隔离的 workspace 目录
+- 每个任务分配隔离 workspace；Git 仓库优先用 `git worktree`，非 Git 目录才复制
+- 用户先通过 `/repos` 选择仓库，再创建 `/task`、`/codex`、`/claude` 任务
+- `task_logs` 持久化任务输出，`/logs` 读取历史日志而不是进程内缓存
+- `WORKSPACE_BASE_DIR` 必须位于源仓库目录外部，避免自我复制和路径污染
+- 本地 runtime 默认通过 `RUNTIME_HEALTH_HOST` / `RUNTIME_HEALTH_PORT` 提供 readiness 检查
+- `pnpm dev` 必须清理旧实例，避免 `getUpdates 409` 和僵尸任务污染
+
+## Bot 交互面
+
+- 内置命令：`/start`、`/repos`、`/task`、`/status`、`/logs`、`/cancel`、`/clear`、`/reset`
+- 插件命令：`/codex`、`/claude`
+- 命令菜单由 `src/bot/bot.ts` 在启动时通过 `setMyCommands()` 注册
+- `/status` 需要展示当前已选仓库、活跃任务、worktree 路径、最近错误
+- `/clear`、`/clear all`、`/reset` 会清理消息记录、仓库选择和任务上下文，修改这些行为时必须补测试
+- 运行脚本：`pnpm dev`（受管后台启动）、`pnpm dev:watch`（裸 watch 调试）、`pnpm stop`、`pnpm status`
 
 ## 目录结构
 
@@ -43,6 +59,9 @@ src/
 - 异步操作必须有超时（默认 30s）和取消机制
 - 所有 CLI 子进程输出必须清理 ANSI 转义符
 - 文件路径一律使用 path.join()，不硬编码分隔符
+- ESM import 必须显式带 `.js` 扩展
+- 修改 Bot 命令、提示文案、仓库选择或任务生命周期时，同步更新文档和命令菜单描述
+- 修改启动/停止方式、runtime 端口、PID 或日志路径时，同步更新文档和脚本说明
 
 ## 测试要求
 
@@ -50,10 +69,39 @@ src/
 - 测试框架：vitest
 - 覆盖率目标：核心模块 > 80%
 - 测试文件命名：`*.test.ts`，与源文件同目录或 `tests/` 镜像目录
+- 新增逻辑文件必须补对应测试；文档变更不要求新增测试，但若行为描述变化，相关行为测试必须同步存在
+
+## 工作流约束
+
+1. 用户先选仓库：`RepositoryCatalog` 扫描 `DEFAULT_WORKSPACE_SOURCE_PATH`
+2. `RepositorySelectionStore` 记录 `userId -> repoPath`
+3. 创建任务时，`TaskRunner` 调用 `WorkspaceManager.prepareWorkspace()`
+4. Git 仓库走 `git worktree add`，worktree 根位于 `WORKSPACE_BASE_DIR`
+5. Agent 在隔离目录运行，输出写入 `task_logs`
+6. 任务结束、取消或失败后，状态和错误信息持久化到 SQLite
+
+## 本地运行约束
+
+1. 默认本地入口是 `pnpm dev`，不是裸 `tsx watch`
+2. 运行时状态统一写入 `.runtime/telegram-ai-manager/local/`
+3. 启动前必须清理旧 PID 和旧 bot 进程，避免 Telegram `getUpdates 409`
+4. 健康检查默认只监听 `127.0.0.1:43117`
+5. `pnpm stop` 需要优先优雅停止，再做安全兜底清理
+
+## 文档闭环要求
+
+以下内容发生变化时，必须在同一组改动中同步更新：
+
+- `README.md`：用户可见功能、启动方式、命令清单、运行流程
+- `CLAUDE.md`：架构约束、交互面、开发规则
+- `AGENTS.md`：Codex / Agent 执行规则
+- `.claude/agents/*.md`：架构审查、代码审查、测试审查标准
+- `.claude/commands/*.md`：计划、预检、同步和插件开发命令说明
+- `src/plugins/CLAUDE.md`：插件开发约束（命令注册、测试、文档同步）
 
 ## Git 规范
 
-- 分支：`feat/<name>`, `fix/<name>`, `refactor/<name>`
+- 分支：优先使用 `codex/<name>`、`claude/<name>` 或语义化前缀分支，不直接在 `main` 上开发
 - 提交格式：Conventional Commits (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`)
 - 每个 Agent 工作在独立分支，通过 PR 合并到 main
 - 禁止直接推送 main 分支
@@ -62,9 +110,12 @@ src/
 
 ```bash
 pnpm install          # 安装依赖
-pnpm dev              # 开发模式（tsx watch）
+pnpm dev              # 受管后台启动本地实例
+pnpm dev:watch        # 原始 tsx watch 调试模式
 pnpm build            # TypeScript 编译
-pnpm start            # 生产启动
+pnpm start            # 受管方式启动 dist
+pnpm stop             # 停止当前本地实例
+pnpm status           # 查看 PID / readiness / 日志
 pnpm test             # 运行测试
 pnpm lint             # ESLint 检查
 pnpm typecheck        # tsc --noEmit
@@ -73,7 +124,9 @@ pnpm typecheck        # tsc --noEmit
 ## 重要警告
 
 - 不要修改 `core/types.ts` 中的接口签名，除非同步更新所有实现
-- 不要在插件中直接操作 Bot 实例，通过 PluginContext 注册
+- 不要在插件中直接操作 Bot 实例，通过 PluginContext / commandRegistry 注册
 - 不要在 service 层引入 Telegram 相关类型，保持传输层无关
 - Redis 连接失败时队列应降级为内存模式
-- node-pty 进程必须在 SIGTERM 时优雅清理
+- `node-pty` 失败时必须保持 `child_process.spawn` 回退链路可用
+- 不要把 `WORKSPACE_BASE_DIR` 配到源仓库内部
+- 不要在本地同时运行多个 bot 实例

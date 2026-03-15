@@ -3,5 +3,7 @@ export const DEFAULT_TIMEOUT_MS = 30_000;
 export const OUTPUT_DEBOUNCE_MS = 500;
 export const DEFAULT_PTY_COLS = 120;
 export const DEFAULT_PTY_ROWS = 30;
+export const TERMINAL_EXIT_POLL_MS = 1_000;
 export const DEFAULT_TASK_LOG_LIMIT = 50;
 export const TASK_RESTART_FAILURE_REASON = "Task interrupted by restart";
+export const TASK_SHUTDOWN_TIMEOUT_MS = 5_000;

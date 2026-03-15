@@ -15,6 +15,6 @@ export class CodexAgent extends BaseAgent {
   }
 
   protected buildArgs(prompt: string): string[] {
-    return ["--quiet", "--prompt", prompt, "--approval-mode", "full-auto"];
+    return ["exec", "--full-auto", prompt];
   }
 }

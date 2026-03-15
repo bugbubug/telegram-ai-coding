@@ -14,7 +14,7 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 pnpm install
-mkdir -p src/config data workspaces
+mkdir -p src/config data .runtime
 
 if [ ! -f .env ]; then
   cp .env.example .env

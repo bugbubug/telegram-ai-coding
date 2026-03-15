@@ -15,6 +15,6 @@ export class ClaudeCodeAgent extends BaseAgent {
   }
 
   protected buildArgs(prompt: string): string[] {
-    return ["--print", "--prompt", prompt];
+    return ["--print", prompt];
   }
 }

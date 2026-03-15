@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { WorkspaceError } from "../../core/errors.js";
 import type { Task, Workspace } from "../../core/types.js";
-import { checkoutBranch, createBranch, isGitRepo } from "./git-utils.js";
+import { addWorktree, deleteBranch, isGitRepo, removeWorktree } from "./git-utils.js";
 
 const ensureWithinBaseDir = (baseDir: string, targetPath: string): void => {
   const relative = path.relative(baseDir, targetPath);
@@ -22,15 +22,15 @@ export class WorkspaceManager {
     const workspacePath = path.join(this.baseDir, task.id);
     await fs.mkdir(this.baseDir, { recursive: true });
     await fs.rm(workspacePath, { recursive: true, force: true });
-    await fs.cp(task.workspaceSourcePath, workspacePath, {
-      recursive: true,
-    });
 
-    let branchName: string | undefined;
-    if (this.gitBranchIsolation && (await isGitRepo(workspacePath))) {
+    let branchName: string | undefined = undefined;
+    if (await isGitRepo(task.workspaceSourcePath)) {
       branchName = `task/${task.id}`;
-      await createBranch(workspacePath, branchName);
-      await checkoutBranch(workspacePath, branchName);
+      await addWorktree(task.workspaceSourcePath, workspacePath, branchName);
+    } else {
+      await fs.cp(task.workspaceSourcePath, workspacePath, {
+        recursive: true,
+      });
     }
 
     return {
@@ -41,8 +41,17 @@ export class WorkspaceManager {
     };
   }
 
-  public async cleanup(workspacePath: string): Promise<void> {
+  public async cleanup(workspace: Workspace | string): Promise<void> {
+    const workspacePath = typeof workspace === "string" ? workspace : workspace.path;
     ensureWithinBaseDir(this.baseDir, workspacePath);
+    if (typeof workspace !== "string" && workspace.branchName && (await isGitRepo(workspace.sourcePath))) {
+      await removeWorktree(workspace.sourcePath, workspacePath);
+      if (this.gitBranchIsolation) {
+        await deleteBranch(workspace.sourcePath, workspace.branchName);
+      }
+      return;
+    }
+
     await fs.rm(workspacePath, { recursive: true, force: true });
   }
 }

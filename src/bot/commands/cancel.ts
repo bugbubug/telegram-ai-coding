@@ -26,6 +26,6 @@ export const registerCancelCommand = (
     }
 
     const task: Task = await taskRunner.cancelTask(taskId);
-    await replyChunked(ctx, `Cancelled task ${task.id}.`);
+    await replyChunked(ctx, `已取消任务 ${task.id}。`);
   });
 };

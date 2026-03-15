@@ -30,6 +30,8 @@ const createContext = (): PluginContext => ({
     GIT_BRANCH_ISOLATION: false,
     REDIS_URL: "redis://localhost:6379",
     TASK_CONCURRENCY: 1,
+    RUNTIME_HEALTH_HOST: "127.0.0.1",
+    RUNTIME_HEALTH_PORT: 43117,
     LOG_LEVEL: "info",
   },
 });

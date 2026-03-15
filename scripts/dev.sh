@@ -1,8 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-if command -v redis-cli >/dev/null 2>&1 && ! redis-cli ping >/dev/null 2>&1; then
-  echo "Redis is unavailable; continuing with in-memory queue fallback"
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-exec pnpm dev
+exec "$SCRIPT_DIR/start.sh" --mode=tsx

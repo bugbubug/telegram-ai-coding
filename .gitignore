@@ -2,6 +2,7 @@ node_modules/
 dist/
 workspaces/
 data/
+.runtime/
 .env
 *.log
 .claude/memory/

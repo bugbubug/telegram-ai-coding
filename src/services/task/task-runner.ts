@@ -1,6 +1,10 @@
 import { AgentError, TaskError } from "../../core/errors.js";
 import type { AgentSession, EventBusLike, LoggerLike, Task } from "../../core/types.js";
-import { TASK_RESTART_FAILURE_REASON } from "../../shared/constants.js";
+import {
+  TASK_RESTART_FAILURE_REASON,
+  TASK_SHUTDOWN_TIMEOUT_MS,
+} from "../../shared/constants.js";
+import { withTimeout } from "../../shared/utils.js";
 import type { AgentRegistry } from "../agent/agent-registry.js";
 import type { ITaskQueue } from "./task-queue.js";
 import type { TaskStore } from "./task-store.js";
@@ -9,6 +13,7 @@ import type { WorkspaceManager } from "../workspace/workspace-manager.js";
 export class TaskRunner {
   private readonly controllers = new Map<string, AbortController>();
   private readonly sessions = new Map<string, AgentSession>();
+  private readonly runningProcesses = new Map<string, Promise<void>>();
   private started = false;
 
   public constructor(
@@ -32,7 +37,13 @@ export class TaskRunner {
     this.started = true;
     await this.recoverTasks();
     await this.taskQueue.start(async (taskId) => {
-      await this.processTask(taskId);
+      const runningProcess = this.processTask(taskId);
+      this.runningProcesses.set(taskId, runningProcess);
+      try {
+        await runningProcess;
+      } finally {
+        this.runningProcesses.delete(taskId);
+      }
     });
   }
 
@@ -54,16 +65,40 @@ export class TaskRunner {
     return task;
   }
 
+  public async cancelTasksForUser(userId: number): Promise<Task[]> {
+    const activeTasks = this.taskStore.listTasksByUser(userId, ["queued", "running"]);
+    const cancelledTasks: Task[] = [];
+
+    for (const task of activeTasks) {
+      cancelledTasks.push(await this.cancelTask(task.id));
+    }
+
+    return cancelledTasks;
+  }
+
   public async shutdown(): Promise<void> {
     for (const controller of this.controllers.values()) {
       controller.abort();
     }
     for (const session of this.sessions.values()) {
       session.kill();
+    }
+
+    try {
+      await withTimeout(
+        Promise.allSettled([...this.runningProcesses.values()]).then(() => undefined),
+        TASK_SHUTDOWN_TIMEOUT_MS,
+      );
+    } catch (error) {
+      this.logger.warn({ error }, "Timed out while waiting for running tasks to stop");
+    }
+
+    for (const session of this.sessions.values()) {
       session.dispose();
     }
     this.controllers.clear();
     this.sessions.clear();
+    this.runningProcesses.clear();
     await this.taskQueue.close();
   }
 

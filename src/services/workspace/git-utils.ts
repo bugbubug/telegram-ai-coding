@@ -27,3 +27,19 @@ export const createBranch = async (cwd: string, branchName: string): Promise<voi
 export const checkoutBranch = async (cwd: string, branchName: string): Promise<void> => {
   await runGit(cwd, ["checkout", branchName]);
 };
+
+export const addWorktree = async (
+  repoPath: string,
+  worktreePath: string,
+  branchName: string,
+): Promise<void> => {
+  await runGit(repoPath, ["worktree", "add", "-b", branchName, worktreePath, "HEAD"]);
+};
+
+export const removeWorktree = async (repoPath: string, worktreePath: string): Promise<void> => {
+  await runGit(repoPath, ["worktree", "remove", "--force", worktreePath]);
+};
+
+export const deleteBranch = async (repoPath: string, branchName: string): Promise<void> => {
+  await runGit(repoPath, ["branch", "-D", branchName]);
+};

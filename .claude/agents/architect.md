@@ -10,8 +10,11 @@ model: opus
 1. 审查代码变更是否违反架构原则（CLAUDE.md 中定义的规则）
 2. 检查模块边界是否清晰：core 不依赖 services，services 不依赖 bot
 3. 确认新增代码是否通过接口编程而非直接依赖实现
-4. 验证插件是否自包含，没有跨插件的直接 import
-5. 检查事件定义是否在 EventMap 中注册
+4. 验证插件是否通过 `PluginContext` / `commandRegistry` 自包含注册命令，没有跨插件直接 import
+5. 检查事件定义是否在 `EventMap` 中注册
+6. 检查仓库选择链路是否清晰：`/repos` -> `RepositorySelectionStore` -> `TaskRunner`
+7. 检查 workspace 是否优先使用 `git worktree`，且 `WORKSPACE_BASE_DIR` 不在源仓库内部
+8. 检查 `task_logs`、命令菜单、`/clear` / `/reset` 等运行时行为是否有对应文档闭环
 
 输出格式：
 - 违规清单（严重性：高/中/低）

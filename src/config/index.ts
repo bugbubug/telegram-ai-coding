@@ -40,6 +40,8 @@ const schema = z.object({
     .transform((value) => value === "true"),
   REDIS_URL: z.string().min(1),
   TASK_CONCURRENCY: z.coerce.number().int().positive(),
+  RUNTIME_HEALTH_HOST: z.string().min(1).default("127.0.0.1"),
+  RUNTIME_HEALTH_PORT: z.coerce.number().int().min(1).max(65535).default(43117),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 });
 

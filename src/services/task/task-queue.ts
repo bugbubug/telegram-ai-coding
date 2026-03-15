@@ -23,12 +23,13 @@ export class InMemoryTaskQueue implements ITaskQueue {
 
   private readonly queue: string[] = [];
   private processor: ((taskId: string) => Promise<void>) | undefined;
-  private draining = false;
+  private drainPromise: Promise<void> | undefined;
   private closed = false;
 
-  public async enqueue(taskId: string): Promise<void> {
+  public enqueue(taskId: string): Promise<void> {
     this.queue.push(taskId);
-    await this.drain();
+    this.scheduleDrain();
+    return Promise.resolve();
   }
 
   public remove(taskId: string): Promise<boolean> {
@@ -41,33 +42,49 @@ export class InMemoryTaskQueue implements ITaskQueue {
     return Promise.resolve(true);
   }
 
-  public async start(processor: (taskId: string) => Promise<void>): Promise<void> {
+  public start(processor: (taskId: string) => Promise<void>): Promise<void> {
     this.processor = processor;
-    await this.drain();
-  }
-
-  public close(): Promise<void> {
-    this.closed = true;
-    this.queue.length = 0;
+    this.scheduleDrain();
     return Promise.resolve();
   }
 
-  private async drain(): Promise<void> {
-    if (this.draining || this.closed || !this.processor) {
+  public async close(): Promise<void> {
+    this.closed = true;
+    this.queue.length = 0;
+    await this.drain();
+  }
+
+  private scheduleDrain(): void {
+    if (this.drainPromise || this.closed || !this.processor) {
       return;
     }
 
-    this.draining = true;
-    try {
-      while (this.queue.length > 0 && !this.closed) {
-        const taskId = this.queue.shift();
-        if (!taskId) {
-          continue;
+    this.drainPromise = Promise.resolve()
+      .then(async () => {
+        while (this.queue.length > 0 && !this.closed) {
+          const taskId = this.queue.shift();
+          if (!taskId) {
+            continue;
+          }
+          await this.processor?.(taskId);
         }
-        await this.processor(taskId);
+      })
+      .finally(() => {
+        this.drainPromise = undefined;
+        if (this.queue.length > 0 && !this.closed) {
+          this.scheduleDrain();
+        }
+      });
+  }
+
+  private async drain(): Promise<void> {
+    const pendingDrain = this.drainPromise;
+    if (pendingDrain) {
+      try {
+        await pendingDrain;
+      } catch {
+        // Processor errors are handled by the runner; closing should still proceed.
       }
-    } finally {
-      this.draining = false;
     }
   }
 }

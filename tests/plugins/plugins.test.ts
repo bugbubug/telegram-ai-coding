@@ -33,6 +33,8 @@ describe("plugins", () => {
         GIT_BRANCH_ISOLATION: false,
         REDIS_URL: "redis://localhost:6379",
         TASK_CONCURRENCY: 1,
+        RUNTIME_HEALTH_HOST: "127.0.0.1",
+        RUNTIME_HEALTH_PORT: 43117,
         LOG_LEVEL: "info",
       },
     };
@@ -44,12 +46,12 @@ describe("plugins", () => {
     expect(registry.listAgentCommands()).toEqual([
       {
         name: "codex",
-        description: "Create a Codex task",
+        description: "创建 Codex 任务",
         agentName: "codex",
       },
       {
         name: "claude",
-        description: "Create a Claude Code task",
+        description: "创建 Claude Code 任务",
         agentName: "claude-code",
       },
     ]);

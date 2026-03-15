@@ -16,6 +16,8 @@ describe("createAuthMiddleware", () => {
       GIT_BRANCH_ISOLATION: false,
       REDIS_URL: "redis://localhost:6379",
       TASK_CONCURRENCY: 1,
+      RUNTIME_HEALTH_HOST: "127.0.0.1",
+      RUNTIME_HEALTH_PORT: 43117,
       LOG_LEVEL: "info",
     });
     const reply = vi.fn();
@@ -46,6 +48,8 @@ describe("createAuthMiddleware", () => {
       GIT_BRANCH_ISOLATION: false,
       REDIS_URL: "redis://localhost:6379",
       TASK_CONCURRENCY: 1,
+      RUNTIME_HEALTH_HOST: "127.0.0.1",
+      RUNTIME_HEALTH_PORT: 43117,
       LOG_LEVEL: "info",
     });
     const reply = vi.fn();
@@ -59,7 +63,7 @@ describe("createAuthMiddleware", () => {
       next,
     );
 
-    expect(reply).toHaveBeenCalledWith("You are not authorized to use this bot.");
+    expect(reply).toHaveBeenCalledWith("你没有权限使用这个机器人。");
     expect(next).not.toHaveBeenCalled();
   });
 });

@@ -13,5 +13,5 @@ export const createErrorHandler =
       return;
     }
 
-    await error.ctx.reply("Something went wrong while processing your request.");
+    await error.ctx.reply("处理请求时发生错误。");
   };
