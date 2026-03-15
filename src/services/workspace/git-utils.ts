@@ -1,5 +1,6 @@
 import { promisify } from "node:util";
 import { execFile as execFileCallback } from "node:child_process";
+import path from "node:path";
 
 const execFile = promisify(execFileCallback);
 
@@ -28,6 +29,22 @@ export const checkoutBranch = async (cwd: string, branchName: string): Promise<v
   await runGit(cwd, ["checkout", branchName]);
 };
 
+export const stageAllChanges = async (cwd: string): Promise<void> => {
+  await runGit(cwd, ["add", "-A"]);
+};
+
+export const hasPendingChanges = async (cwd: string): Promise<boolean> => {
+  const output = await runGit(cwd, ["status", "--porcelain"]);
+  return output.length > 0;
+};
+
+export const commitAllChanges = async (cwd: string, message: string): Promise<void> => {
+  await runGit(cwd, ["commit", "-m", message]);
+};
+
+export const getHeadCommit = async (cwd: string): Promise<string> =>
+  runGit(cwd, ["rev-parse", "HEAD"]);
+
 export const addWorktree = async (
   repoPath: string,
   worktreePath: string,
@@ -36,10 +53,62 @@ export const addWorktree = async (
   await runGit(repoPath, ["worktree", "add", "-b", branchName, worktreePath, "HEAD"]);
 };
 
+export interface GitWorktreeEntry {
+  path: string;
+  branchName?: string;
+}
+
+export const listWorktrees = async (repoPath: string): Promise<GitWorktreeEntry[]> => {
+  const output = await runGit(repoPath, ["worktree", "list", "--porcelain"]);
+  const entries: GitWorktreeEntry[] = [];
+  let current: GitWorktreeEntry | null = null;
+
+  for (const line of output.split("\n")) {
+    if (line.startsWith("worktree ")) {
+      if (current) {
+        entries.push(current);
+      }
+      current = {
+        path: path.resolve(line.slice("worktree ".length)),
+      };
+      continue;
+    }
+
+    if (line.startsWith("branch ") && current) {
+      current.branchName = line.slice("branch refs/heads/".length);
+      continue;
+    }
+
+    if (line.length === 0 && current) {
+      entries.push(current);
+      current = null;
+    }
+  }
+
+  if (current) {
+    entries.push(current);
+  }
+
+  return entries;
+};
+
+export const pruneWorktrees = async (repoPath: string): Promise<void> => {
+  await runGit(repoPath, ["worktree", "prune"]);
+};
+
 export const removeWorktree = async (repoPath: string, worktreePath: string): Promise<void> => {
   await runGit(repoPath, ["worktree", "remove", "--force", worktreePath]);
 };
 
 export const deleteBranch = async (repoPath: string, branchName: string): Promise<void> => {
   await runGit(repoPath, ["branch", "-D", branchName]);
+};
+
+export const branchExists = async (repoPath: string, branchName: string): Promise<boolean> => {
+  try {
+    await runGit(repoPath, ["rev-parse", "--verify", `refs/heads/${branchName}`]);
+    return true;
+  } catch {
+    return false;
+  }
 };

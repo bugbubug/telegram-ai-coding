@@ -28,6 +28,7 @@ Telegram Bot UI 统一管理本机 Codex CLI 和 Claude Code CLI 终端会话。
 - `/repos` 只列出 `DEFAULT_WORKSPACE_SOURCE_PATH` 下可识别的 Git 仓库
 - 用户通常先通过 `/repos` 选择仓库，再创建 `/task`、`/codex`、`/claude` 任务；若未选择仓库，则回退到 `DEFAULT_WORKSPACE_SOURCE_PATH`
 - `/task`、`/codex`、`/claude` 支持 `workspace::prompt` 显式覆盖目标路径
+- 同一 task id 重试前必须先清理残留 worktree 注册；任务失败、取消和重启恢复后必须回收 workspace；成功任务要保留 worktree 供后续提交
 - `task_logs` 持久化任务输出，`/logs` 读取历史日志而不是进程内缓存
 - `WORKSPACE_BASE_DIR` 必须位于源仓库目录外部，避免自我复制和路径污染
 - 本地 runtime 默认通过 `RUNTIME_HEALTH_HOST` / `RUNTIME_HEALTH_PORT` 提供 readiness 检查
@@ -35,11 +36,12 @@ Telegram Bot UI 统一管理本机 Codex CLI 和 Claude Code CLI 终端会话。
 
 ## Bot 交互面
 
-- 内置命令：`/start`、`/repos`、`/task`、`/status`、`/logs`、`/cancel`、`/clear`、`/reset`
+- 内置命令：`/start`、`/repos`、`/task`、`/status`、`/logs`、`/cancel`、`/submit`、`/clear`、`/reset`
 - 插件命令：`/codex`、`/claude`
 - 命令菜单由 `src/bot/bot.ts` 在启动时通过 `setMyCommands()` 注册
 - `/task`、`/codex`、`/claude` 的命令格式均支持 `[workspace::]prompt`
 - `/status` 需要展示当前已选仓库、活跃任务、worktree 路径、最近错误
+- Codex 任务默认不向 Telegram 流式推送中间过程，只在完成时返回最终结果和提交信息
 - `/clear`、`/clear all`、`/reset` 会清理消息记录、仓库选择和任务上下文，修改这些行为时必须补测试
 - 运行脚本：`pnpm dev`（受管后台启动）、`pnpm dev:watch`（裸 watch 调试）、`pnpm stop`、`pnpm status`
 
@@ -83,7 +85,8 @@ src/
 5. Git 仓库走 `git worktree add`，worktree 根位于 `WORKSPACE_BASE_DIR`
 6. 非 Git 目标路径回退为目录复制
 7. Agent 在隔离目录运行，输出写入 `task_logs`
-8. 任务结束、取消或失败后，状态和错误信息持久化到 SQLite
+8. 成功任务保留 worktree，并向用户返回 `task_id`、分支名、worktree 路径，供 `/submit <task_id>` 使用
+9. 任务取消、失败或重启恢复后，状态和错误信息持久化到 SQLite，并清理对应 worktree / workspace
 
 ## 本地运行约束
 

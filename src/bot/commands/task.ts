@@ -1,15 +1,17 @@
+import fs from "node:fs/promises";
 import path from "node:path";
 
 import { InlineKeyboard, type Bot, type Context } from "grammy";
 
 import type { AppConfig } from "../../config/index.js";
 import { ValidationError } from "../../core/errors.js";
-import type { EventBusLike, LoggerLike } from "../../core/types.js";
+import type { EventBusLike, LoggerLike, Task, TaskLogEntry } from "../../core/types.js";
 import { DEFAULT_TASK_LOG_LIMIT } from "../../shared/constants.js";
-import { chunkMessage } from "../../shared/utils.js";
+import { chunkMessage, stripAnsiCodes } from "../../shared/utils.js";
 import type { AgentRegistry } from "../../services/agent/agent-registry.js";
 import type { ITaskQueue } from "../../services/task/task-queue.js";
 import type { TaskStore } from "../../services/task/task-store.js";
+import { getCurrentBranch } from "../../services/workspace/git-utils.js";
 import type { RepositoryCatalog, RepositoryOption } from "../../services/workspace/repository-catalog.js";
 import type { PendingTaskInputStore } from "../pending-task-input-store.js";
 import type { RepositorySelectionStore } from "../repository-selection-store.js";
@@ -114,10 +116,97 @@ export const formatPendingTaskPrompt = (
   return `请输入任务内容，下一条文本将使用 ${agentLabel} 执行。\n当前仓库：${workspaceSourcePath}`;
 };
 
-const bindTaskStreaming = (
+const shouldStreamTaskOutput = (agentName: string): boolean => agentName !== "codex";
+
+const getMeaningfulLogs = (logs: TaskLogEntry[]): string[] =>
+  logs
+    .map((entry) => stripAnsiCodes(entry.content).replace(/\r/g, "").trim())
+    .filter((content) => content.length > 0);
+
+export const extractCodexFinalReply = (logs: TaskLogEntry[]): string => {
+  const meaningfulLogs = getMeaningfulLogs(logs);
+  const codexChunk = [...meaningfulLogs]
+    .reverse()
+    .find((content) => /(?:^|\n)codex\n/u.test(content));
+
+  const selected = codexChunk ?? meaningfulLogs.at(-1) ?? "";
+  if (selected.length === 0) {
+    return "";
+  }
+
+  let output = selected;
+  const codexMarkerIndex = output.lastIndexOf("\ncodex\n");
+  if (codexMarkerIndex >= 0) {
+    output = output.slice(codexMarkerIndex + "\ncodex\n".length);
+  } else if (output.startsWith("codex\n")) {
+    output = output.slice("codex\n".length);
+  }
+
+  const tokenMarker = output.lastIndexOf("\ntokens used\n");
+  if (tokenMarker >= 0) {
+    const tail = output.slice(tokenMarker + "\ntokens used\n".length);
+    const tailLines = tail
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    const firstTextLineIndex = tailLines.findIndex((line) => !/^[\d,]+$/u.test(line));
+    if (firstTextLineIndex >= 0) {
+      return tailLines.slice(firstTextLineIndex).join("\n").trim();
+    }
+    output = output.slice(0, tokenMarker);
+  }
+
+  return output.trim();
+};
+
+const formatTaskSubmissionHint = async (task: Task): Promise<string[]> => {
+  if (!task.workspacePath) {
+    return [];
+  }
+
+  const lines = [`Worktree：${task.workspacePath}`];
+  try {
+    await fs.access(path.join(task.workspacePath, ".git"));
+    const branchName = await getCurrentBranch(task.workspacePath);
+    if (branchName) {
+      lines.push(`分支：${branchName}`);
+      lines.push(`提交：/submit ${task.id}`);
+    }
+  } catch {
+    // Non-git workspace keeps only the path.
+  }
+
+  return lines;
+};
+
+const formatTaskCompletionReply = async (
+  taskStore: TaskStore,
+  task: Task,
+): Promise<string> => {
+  const lines = [`任务已完成 ${task.id}`];
+  const submissionHint = await formatTaskSubmissionHint(task);
+  if (task.agentName === "codex") {
+    const finalReply = extractCodexFinalReply(taskStore.getLogs(task.id, 200));
+    if (finalReply.length > 0) {
+      lines.push("", "结果：", finalReply);
+    } else {
+      lines.push("", "结果：未提取到最终输出，可使用 /logs 查看原始日志。");
+    }
+  }
+
+  if (submissionHint.length > 0) {
+    lines.push("", ...submissionHint);
+  }
+
+  return lines.join("\n");
+};
+
+const bindTaskNotifications = (
   ctx: Context,
   eventBus: EventBusLike,
   logger: LoggerLike,
+  taskStore: TaskStore,
+  agentName: string,
   taskId: string,
 ): void => {
   let sendQueue = Promise.resolve();
@@ -132,17 +221,20 @@ const bindTaskStreaming = (
       });
   };
 
-  const unsubscribeOutput = eventBus.on("task:output", ({ taskId: outputTaskId, chunk }) => {
-    if (outputTaskId !== taskId) {
-      return;
-    }
-
-    enqueueReply(chunk);
-  });
   const cleanups: Array<() => void> = [];
+  if (shouldStreamTaskOutput(agentName)) {
+    cleanups.push(
+      eventBus.on("task:output", ({ taskId: outputTaskId, chunk }) => {
+        if (outputTaskId !== taskId) {
+          return;
+        }
+
+        enqueueReply(chunk);
+      }),
+    );
+  }
 
   const stop = (): void => {
-    unsubscribeOutput();
     for (const cleanup of cleanups) {
       cleanup();
     }
@@ -153,6 +245,13 @@ const bindTaskStreaming = (
     eventBus.on("task:completed", ({ task }) => {
       if (task.id === taskId) {
         stop();
+        sendQueue = sendQueue
+          .then(async () => {
+            await replyChunked(ctx, await formatTaskCompletionReply(taskStore, task));
+          })
+          .catch((error: unknown) => {
+            logger.error({ error, taskId }, "Failed to send task completion reply");
+          });
       }
     }),
   );
@@ -160,6 +259,8 @@ const bindTaskStreaming = (
     eventBus.on("task:failed", ({ task }) => {
       if (task.id === taskId) {
         stop();
+        const message = task.errorMessage ?? "任务执行失败。";
+        enqueueReply(`任务失败 ${task.id}\n错误：${message}`);
       }
     }),
   );
@@ -167,6 +268,7 @@ const bindTaskStreaming = (
     eventBus.on("task:cancelled", ({ task }) => {
       if (task.id === taskId) {
         stop();
+        enqueueReply(`任务已取消 ${task.id}`);
       }
     }),
   );
@@ -209,7 +311,14 @@ export const createTaskMessageHandler =
 
     await dependencies.taskQueue.enqueue(task.id);
     dependencies.eventBus.emit("task:queued", { task });
-    bindTaskStreaming(ctx, dependencies.eventBus, dependencies.logger, task.id);
+    bindTaskNotifications(
+      ctx,
+      dependencies.eventBus,
+      dependencies.logger,
+      dependencies.taskStore,
+      task.agentName,
+      task.id,
+    );
 
     await ctx.reply(
       `任务已入队 ${task.id}\nAgent：${task.agentName}\n仓库：${task.workspaceSourcePath}`,

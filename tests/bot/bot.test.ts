@@ -27,6 +27,7 @@ describe("buildBotCommands", () => {
       { command: "status", description: "查看排队中和运行中的任务" },
       { command: "logs", description: "查看任务最近日志" },
       { command: "cancel", description: "取消排队中或运行中的任务" },
+      { command: "submit", description: "提交已完成任务的本地分支" },
       { command: "clear", description: "清空当前聊天中的机器人消息" },
       { command: "reset", description: "重置当前会话并取消活跃任务" },
       { command: "codex", description: "创建 Codex 任务" },

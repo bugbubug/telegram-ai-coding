@@ -1,5 +1,5 @@
 import { AgentError, TaskError } from "../../core/errors.js";
-import type { AgentSession, EventBusLike, LoggerLike, Task } from "../../core/types.js";
+import type { AgentSession, EventBusLike, LoggerLike, Task, Workspace } from "../../core/types.js";
 import {
   TASK_RESTART_FAILURE_REASON,
   TASK_SHUTDOWN_TIMEOUT_MS,
@@ -108,6 +108,7 @@ export class TaskRunner {
     }
 
     for (const task of this.taskStore.listTasksByStatuses(["running"])) {
+      await this.cleanupTaskWorkspace(task);
       const failedTask = this.taskStore.updateTaskStatus(
         task.id,
         "failed",
@@ -128,8 +129,10 @@ export class TaskRunner {
 
     const controller = new AbortController();
     this.controllers.set(task.id, controller);
+    let workspace: Workspace | undefined;
+    let preserveWorkspace = false;
     try {
-      const workspace = await this.workspaceManager.prepareWorkspace(task);
+      workspace = await this.workspaceManager.prepareWorkspace(task);
       this.taskStore.updateWorkspacePath(task.id, workspace.path);
       const runningTask = this.taskStore.updateTaskStatus(task.id, "running");
       this.eventBus.emit("task:started", { task: runningTask });
@@ -157,6 +160,7 @@ export class TaskRunner {
       if (result.exitCode === 0) {
         const completedTask = this.taskStore.updateTaskStatus(task.id, "completed");
         this.eventBus.emit("task:completed", { task: completedTask });
+        preserveWorkspace = true;
         return;
       }
 
@@ -173,6 +177,35 @@ export class TaskRunner {
       const session = this.sessions.get(task.id);
       session?.dispose();
       this.sessions.delete(task.id);
+      if (!preserveWorkspace) {
+        await this.cleanupTaskWorkspace(task, workspace);
+      }
     }
+  }
+
+  private async cleanupTaskWorkspace(task: Task, workspace?: Workspace): Promise<void> {
+    const targetWorkspace = workspace ?? this.getPersistedWorkspace(task);
+    if (!targetWorkspace) {
+      return;
+    }
+
+    try {
+      await this.workspaceManager.cleanup(targetWorkspace);
+    } catch (error) {
+      this.logger.warn({ taskId: task.id, error }, "Failed to clean up task workspace");
+    }
+  }
+
+  private getPersistedWorkspace(task: Task): Workspace | undefined {
+    if (!task.workspacePath) {
+      return undefined;
+    }
+
+    return {
+      taskId: task.id,
+      sourcePath: task.workspaceSourcePath,
+      path: task.workspacePath,
+      branchName: `task/${task.id}`,
+    };
   }
 }

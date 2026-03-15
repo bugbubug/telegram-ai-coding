@@ -139,6 +139,7 @@ export const ServiceNames = {
   repositoryCatalog: "repositoryCatalog",
   repositorySelectionStore: "repositorySelectionStore",
   taskQueue: "taskQueue",
+  taskSubmitter: "taskSubmitter",
   taskRunner: "taskRunner",
   taskStore: "taskStore",
   terminalManager: "terminalManager",

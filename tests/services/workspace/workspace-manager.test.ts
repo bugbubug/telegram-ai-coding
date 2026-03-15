@@ -63,6 +63,36 @@ describe("WorkspaceManager", () => {
     await expect(fs.access(workspace.path)).rejects.toThrow();
   });
 
+  it("recreates a task worktree when the previous registration still exists", async () => {
+    const sourceDir = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-source-reuse-"));
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-base-reuse-"));
+    tempDirs.push(sourceDir, baseDir);
+
+    await execFile("git", ["init", "-b", "main"], { cwd: sourceDir });
+    await execFile("git", ["config", "user.email", "codex@example.com"], { cwd: sourceDir });
+    await execFile("git", ["config", "user.name", "Codex"], { cwd: sourceDir });
+    await fs.writeFile(path.join(sourceDir, "README.md"), "hello");
+    await execFile("git", ["add", "."], { cwd: sourceDir });
+    await execFile("git", ["commit", "-m", "init"], { cwd: sourceDir });
+
+    const manager = new WorkspaceManager(baseDir, true);
+    const task = createTask(sourceDir, "task-reuse");
+
+    const firstWorkspace = await manager.prepareWorkspace(task);
+    await expect(fs.readFile(path.join(firstWorkspace.path, "README.md"), "utf8")).resolves.toBe("hello");
+
+    const secondWorkspace = await manager.prepareWorkspace(task);
+    await expect(fs.readFile(path.join(secondWorkspace.path, "README.md"), "utf8")).resolves.toBe("hello");
+
+    const worktreeList = await execFile("git", ["worktree", "list", "--porcelain"], {
+      cwd: sourceDir,
+    });
+    expect(worktreeList.stdout).toContain(secondWorkspace.path);
+    expect(worktreeList.stdout.match(/task\/task-reuse/g)).toHaveLength(1);
+
+    await manager.cleanup(secondWorkspace);
+  });
+
   it("falls back to copying non-git directories", async () => {
     const sourceDir = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-copy-source-"));
     const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-copy-base-"));

@@ -17,8 +17,9 @@ model: sonnet
 
 - `/repos` 仓库选择和当前用户状态保存
 - `/task`、`/codex`、`/claude` 的 `workspace::prompt` 与默认路径回退
-- `WorkspaceManager` 的 `git worktree` 创建、清理和非 Git 回退
-- `TaskRunner` 的日志持久化、重启恢复、取消逻辑
+- `WorkspaceManager` 的 `git worktree` 创建、残留 worktree 重建、清理和非 Git 回退
+- `TaskRunner` 的日志持久化、重启恢复、取消逻辑，以及成功任务保留 workspace / 失败任务回收
+- `/submit` 的本地分支提交逻辑与返回信息
 - `/clear`、`/clear all`、`/reset` 的消息清理和任务取消
 - `setMyCommands()` 对内置命令和插件命令的注册
 - `node-pty` 不可用时的终端回退

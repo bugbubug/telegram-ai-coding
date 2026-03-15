@@ -40,13 +40,15 @@ pnpm build && pnpm start
 
 ## 当前能力 / Current Capabilities
 
-- Telegram 命令菜单会在启动时自动注册：`/start`、`/repos`、`/task`、`/status`、`/logs`、`/cancel`、`/clear`、`/reset`、`/codex`、`/claude`
+- Telegram 命令菜单会在启动时自动注册：`/start`、`/repos`、`/task`、`/status`、`/logs`、`/cancel`、`/submit`、`/clear`、`/reset`、`/codex`、`/claude`
 - `/repos` 会列出 `DEFAULT_WORKSPACE_SOURCE_PATH` 下可识别的 Git 仓库；选中后，后续 `/task`、`/codex`、`/claude` 和自由文本默认作用于该仓库
 - 若当前未选择仓库，`/task`、`/codex`、`/claude` 会回退使用 `DEFAULT_WORKSPACE_SOURCE_PATH`；也支持通过 `workspace::prompt` 显式指定目标路径
-- Git 仓库默认使用独立 `git worktree` 隔离任务；只有当任务目标路径本身不是 Git 目录时，才回退为目录复制
+- Git 仓库默认使用独立 `git worktree` 隔离任务；非 Git 目录才回退为目录复制
+- 任务重试前会自动清理同 task id 的残留 worktree 注册；失败、取消或重启恢复后的 worktree 会自动回收，成功任务会保留 worktree 以便后续提交
 - 任务状态和历史输出持久化到 SQLite，`/logs` 支持查看历史输出
 - Redis 不可用时，任务队列自动降级为内存模式
 - `node-pty` 启动失败时，终端层会自动回退到 `child_process.spawn`
+- Codex 任务默认不回传中间过程，只在完成时返回最终结果、task id、分支和 worktree 信息
 - `/clear`、`/clear all`、`/reset` 用于清理机器人消息、仓库选择和活跃任务上下文
 - 本地运行改为单实例受管模式：`pnpm dev` 会清理旧进程、写入 PID/日志、检查 readiness
 - 运行状态通过本地健康端口暴露，默认只监听 `127.0.0.1:43117`
@@ -60,8 +62,10 @@ pnpm build && pnpm start
 3. 若未选择仓库，则任务默认回退到 `DEFAULT_WORKSPACE_SOURCE_PATH`；若使用 `workspace::prompt`，则以显式路径为准
 4. `TaskRunner` 为每个任务创建独立工作目录
 5. Git 仓库走 `git worktree`，目录路径固定在仓库外部的 `WORKSPACE_BASE_DIR`；非 Git 目录回退为目录复制
-6. Agent 在隔离 worktree 中运行，输出经过 ANSI 清理、防抖和 4096 字符分片后推送到 Telegram
-7. 使用 `/status`、`/logs`、`/cancel`、`/clear`、`/reset` 管理当前会话
+6. Agent 在隔离 worktree 中运行；Codex 默认只在完成后回传最终结果，其他输出仍会写入任务日志并遵守 ANSI 清理、去抖和 4096 字符分片约束
+7. 成功任务保留 worktree 并返回 `task_id`、分支名、worktree 路径，可通过 `/submit <task_id>` 自动提交本地分支
+8. 失败、取消或重启恢复后的任务自动清理对应 worktree，避免残留分支占用
+9. 使用 `/status`、`/logs`、`/cancel`、`/submit`、`/clear`、`/reset` 管理当前会话
 
 ---
 
@@ -92,11 +96,12 @@ pnpm build && pnpm start
 | `/status` | 查看当前已选仓库、活跃任务、worktree 路径和最近错误 |
 | `/logs [task_id]` | 查看最近任务或指定任务的历史输出 |
 | `/cancel [task_id]` | 取消排队中或运行中的任务 |
+| `/submit [task_id] [message]` | 提交最近完成任务或指定任务的本地分支 |
 | `/clear` | 清空当前聊天中的机器人消息并重置仓库选择 |
 | `/clear all` | 清空机器人消息并取消当前用户的活跃任务 |
 | `/reset` | 清空消息、取消活跃任务并重置当前会话 |
 
-说明：`/task`、`/codex`、`/claude` 支持两步输入，可以先发命令，再把下一条文本作为任务内容；若未选择仓库，则默认回退到 `DEFAULT_WORKSPACE_SOURCE_PATH`；使用 `workspace::prompt` 可直接指定任意本地目录。
+说明：`/task`、`/codex`、`/claude` 支持两步输入，可以先发命令，再把下一条文本作为任务内容；若未选择仓库，则默认回退到 `DEFAULT_WORKSPACE_SOURCE_PATH`；使用 `workspace::prompt` 可直接指定任意本地目录。`/submit` 默认提交最近一条已完成任务，也支持在命令后追加自定义 commit message。
 
 ---
 

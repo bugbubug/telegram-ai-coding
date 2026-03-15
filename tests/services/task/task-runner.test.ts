@@ -1,6 +1,8 @@
+import { execFile as execFileCallback } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -16,6 +18,8 @@ import { TaskRunner } from "../../../src/services/task/task-runner.js";
 import type { ITaskQueue } from "../../../src/services/task/task-queue.js";
 import { TaskStore } from "../../../src/services/task/task-store.js";
 import { WorkspaceManager } from "../../../src/services/workspace/workspace-manager.js";
+
+const execFile = promisify(execFileCallback);
 
 class FakeQueue implements ITaskQueue {
   public readonly mode = "memory" as const;
@@ -129,6 +133,9 @@ describe("TaskRunner", () => {
     expect(completedTask.status).toBe("completed");
     expect(completedTask.workspacePath).toContain(task.id);
     expect(store.getLogs(task.id).map((entry) => entry.content)).toEqual(["hello from agent"]);
+    await expect(fs.readFile(path.join(completedTask.workspacePath!, "README.md"), "utf8")).resolves.toBe(
+      "source",
+    );
 
     store.close();
   });
@@ -137,6 +144,13 @@ describe("TaskRunner", () => {
     const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), "task-recovery-"));
     const sourceDir = await fs.mkdtemp(path.join(os.tmpdir(), "task-recovery-source-"));
     tempDirs.push(baseDir, sourceDir);
+
+    await execFile("git", ["init", "-b", "main"], { cwd: sourceDir });
+    await execFile("git", ["config", "user.email", "codex@example.com"], { cwd: sourceDir });
+    await execFile("git", ["config", "user.name", "Codex"], { cwd: sourceDir });
+    await fs.writeFile(path.join(sourceDir, "README.md"), "source");
+    await execFile("git", ["add", "."], { cwd: sourceDir });
+    await execFile("git", ["commit", "-m", "init"], { cwd: sourceDir });
 
     const store = new TaskStore(":memory:");
     const queue = new FakeQueue();
@@ -158,12 +172,19 @@ describe("TaskRunner", () => {
       workspaceSourcePath: sourceDir,
     });
     store.updateTaskStatus(runningTask.id, "running");
+    const leakedWorkspace = await workspaceManager.prepareWorkspace(store.getTask(runningTask.id));
+    store.updateWorkspacePath(runningTask.id, leakedWorkspace.path);
 
     const runner = new TaskRunner(store, queue, workspaceManager, agentRegistry, eventBus, logger);
     await runner.start();
 
     expect(store.getTask(queuedTask.id).status).toBe("completed");
     expect(store.getTask(runningTask.id).status).toBe("failed");
+    await expect(fs.access(leakedWorkspace.path)).rejects.toThrow();
+    const worktreeList = await execFile("git", ["worktree", "list", "--porcelain"], {
+      cwd: sourceDir,
+    });
+    expect(worktreeList.stdout).not.toContain(leakedWorkspace.path);
 
     store.close();
   });
