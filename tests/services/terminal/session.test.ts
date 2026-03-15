@@ -84,6 +84,7 @@ describe("TerminalSession", () => {
       stdout,
       stderr,
       stdin: {
+        end: vi.fn(),
         write: vi.fn(),
       },
       kill: vi.fn(),
@@ -97,6 +98,7 @@ describe("TerminalSession", () => {
       args: ["--print", "hello"],
       cwd: process.cwd(),
       preferPty: false,
+      closeStdinOnStart: true,
       onOutput,
     });
 
@@ -114,6 +116,7 @@ describe("TerminalSession", () => {
         cwd: process.cwd(),
       }),
     );
+    expect(fakeChild.stdin.end).toHaveBeenCalledTimes(1);
     expect(onOutput).toHaveBeenCalledWith("ok");
     expect(completion.exitCode).toBe(0);
 

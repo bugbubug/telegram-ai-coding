@@ -38,6 +38,7 @@ export abstract class BaseAgent implements AgentAdapter {
         cwd: options.cwd,
         env: options.env,
         preferPty: this.prefersPty(),
+        closeStdinOnStart: this.shouldCloseStdinOnStart(),
         onOutput: (chunk) => {
           this.eventBus.emit("task:output", { taskId: options.taskId, chunk });
         },
@@ -57,5 +58,9 @@ export abstract class BaseAgent implements AgentAdapter {
 
   protected prefersPty(): boolean {
     return true;
+  }
+
+  protected shouldCloseStdinOnStart(): boolean {
+    return false;
   }
 }

@@ -23,6 +23,7 @@ export interface TerminalSessionOptions {
   env?: NodeJS.ProcessEnv;
   onOutput: (chunk: string) => void;
   preferPty?: boolean;
+  closeStdinOnStart?: boolean;
 }
 
 type TerminalProcess = IPty | ChildProcessWithoutNullStreams;
@@ -70,12 +71,14 @@ export class TerminalSession implements AgentSession {
   private readonly childProcess: ChildProcessWithoutNullStreams | null;
   private readonly processPid: number | undefined;
   private readonly exitPollTimer: NodeJS.Timeout;
+  private readonly closeStdinOnStart: boolean;
 
   public constructor(private readonly options: TerminalSessionOptions) {
     this.outputBuffer = new OutputBuffer(options.onOutput);
     this.completion = new Promise<AgentCompletionResult>((resolve) => {
       this.resolveCompletion = resolve;
     });
+    this.closeStdinOnStart = options.closeStdinOnStart ?? false;
 
     const env = sanitizeSpawnEnv({
       ...process.env,
@@ -209,6 +212,9 @@ export class TerminalSession implements AgentSession {
     processHandle: ChildProcessWithoutNullStreams,
     originalError: unknown,
   ): void {
+    if (this.closeStdinOnStart) {
+      processHandle.stdin.end();
+    }
     processHandle.stdout.on("data", (data: Buffer) => {
       this.outputBuffer.append(data.toString("utf8"));
     });

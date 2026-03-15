@@ -22,4 +22,8 @@ export class ClaudeCodeAgent extends BaseAgent {
     // Claude print mode can block on PTY sessions without producing output.
     return false;
   }
+
+  protected shouldCloseStdinOnStart(): boolean {
+    return true;
+  }
 }
