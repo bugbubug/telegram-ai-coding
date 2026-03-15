@@ -1,10 +1,18 @@
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("node-pty", () => ({
   spawn: vi.fn(),
 }));
 
+vi.mock("node:child_process", () => ({
+  spawn: vi.fn(),
+}));
+
 import * as pty from "node-pty";
+import { spawn as spawnChildProcess } from "node:child_process";
 
 import {
   isProcessAlive,
@@ -64,6 +72,50 @@ describe("TerminalSession", () => {
     expect(session.status).toBe("failed");
     expect(completion.cancelled).toBe(false);
     expect(completion.error?.message).toContain("exited without an exit event");
+
+    session.dispose();
+  });
+
+  it("uses child_process when PTY is disabled for the session", async () => {
+    const stdout = new PassThrough();
+    const stderr = new PassThrough();
+    const fakeChild = Object.assign(new EventEmitter(), {
+      pid: 123456,
+      stdout,
+      stderr,
+      stdin: {
+        write: vi.fn(),
+      },
+      kill: vi.fn(),
+    });
+    const onOutput = vi.fn();
+
+    vi.mocked(spawnChildProcess).mockReturnValue(fakeChild as never);
+
+    const session = new TerminalSession({
+      command: "claude",
+      args: ["--print", "hello"],
+      cwd: process.cwd(),
+      preferPty: false,
+      onOutput,
+    });
+
+    stdout.write("ok");
+    stdout.end();
+    fakeChild.emit("close", 0, null);
+
+    const completion = await session.completion;
+
+    expect(pty.spawn).not.toHaveBeenCalled();
+    expect(spawnChildProcess).toHaveBeenCalledWith(
+      "claude",
+      ["--print", "hello"],
+      expect.objectContaining({
+        cwd: process.cwd(),
+      }),
+    );
+    expect(onOutput).toHaveBeenCalledWith("ok");
+    expect(completion.exitCode).toBe(0);
 
     session.dispose();
   });

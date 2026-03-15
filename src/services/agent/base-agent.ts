@@ -37,6 +37,7 @@ export abstract class BaseAgent implements AgentAdapter {
         args: [...this.extraArgs, ...this.buildArgs(options.prompt)],
         cwd: options.cwd,
         env: options.env,
+        preferPty: this.prefersPty(),
         onOutput: (chunk) => {
           this.eventBus.emit("task:output", { taskId: options.taskId, chunk });
         },
@@ -53,4 +54,8 @@ export abstract class BaseAgent implements AgentAdapter {
   }
 
   protected abstract buildArgs(prompt: string): string[];
+
+  protected prefersPty(): boolean {
+    return true;
+  }
 }

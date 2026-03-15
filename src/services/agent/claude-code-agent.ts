@@ -17,4 +17,9 @@ export class ClaudeCodeAgent extends BaseAgent {
   protected buildArgs(prompt: string): string[] {
     return ["--print", prompt];
   }
+
+  protected prefersPty(): boolean {
+    // Claude print mode can block on PTY sessions without producing output.
+    return false;
+  }
 }

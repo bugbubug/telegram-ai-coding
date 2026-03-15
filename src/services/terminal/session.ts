@@ -22,6 +22,7 @@ export interface TerminalSessionOptions {
   cwd: string;
   env?: NodeJS.ProcessEnv;
   onOutput: (chunk: string) => void;
+  preferPty?: boolean;
 }
 
 type TerminalProcess = IPty | ChildProcessWithoutNullStreams;
@@ -81,19 +82,38 @@ export class TerminalSession implements AgentSession {
       ...options.env,
     });
 
+    if (options.preferPty !== false) {
+      try {
+        this.process = pty.spawn(options.command, options.args, {
+          name: "xterm-color",
+          cols: DEFAULT_PTY_COLS,
+          rows: DEFAULT_PTY_ROWS,
+          cwd: options.cwd,
+          env,
+        });
+        this.usesPty = true;
+        this.ptyProcess = this.process;
+        this.childProcess = null;
+        this.processPid = getProcessPid(this.process);
+        this.exitPollTimer = this.startExitPoll();
+        this.bindPtyProcess(this.process);
+        return;
+      } catch (error) {
+        this.process = spawnChildProcess(options.command, options.args, {
+          cwd: options.cwd,
+          env,
+        });
+        this.usesPty = false;
+        this.ptyProcess = null;
+        this.childProcess = this.process;
+        this.processPid = getProcessPid(this.process);
+        this.exitPollTimer = this.startExitPoll();
+        this.bindChildProcess(this.process, error);
+        return;
+      }
+    }
+
     try {
-      this.process = pty.spawn(options.command, options.args, {
-        name: "xterm-color",
-        cols: DEFAULT_PTY_COLS,
-        rows: DEFAULT_PTY_ROWS,
-        cwd: options.cwd,
-        env,
-      });
-      this.usesPty = true;
-      this.ptyProcess = this.process;
-      this.childProcess = null;
-      this.processPid = getProcessPid(this.process);
-    } catch (error) {
       this.process = spawnChildProcess(options.command, options.args, {
         cwd: options.cwd,
         env,
@@ -103,12 +123,11 @@ export class TerminalSession implements AgentSession {
       this.childProcess = this.process;
       this.processPid = getProcessPid(this.process);
       this.exitPollTimer = this.startExitPoll();
-      this.bindChildProcess(this.process, error);
+      this.bindChildProcess(this.process, new Error("PTY disabled for this session"));
       return;
+    } catch (error) {
+      throw new TerminalError(`Failed to spawn process for ${options.command}`, error);
     }
-
-    this.exitPollTimer = this.startExitPoll();
-    this.bindPtyProcess(this.process);
   }
 
   public write(input: string): void {

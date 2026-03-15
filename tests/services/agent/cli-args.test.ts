@@ -14,6 +14,7 @@ interface CapturedInvocation {
   command: string;
   args: string[];
   cwd: string;
+  preferPty?: boolean;
 }
 
 const createTerminalManagerStub = (captured: CapturedInvocation[]): TerminalManager =>
@@ -23,12 +24,14 @@ const createTerminalManagerStub = (captured: CapturedInvocation[]): TerminalMana
       args: string[];
       cwd: string;
       env?: NodeJS.ProcessEnv;
+      preferPty?: boolean;
       onOutput: (chunk: string) => void;
     }): AgentSession {
       captured.push({
         command: options.command,
         args: options.args,
         cwd: options.cwd,
+        preferPty: options.preferPty,
       });
 
       return {
@@ -93,6 +96,7 @@ describe("CLI agent argument adapters", () => {
       command: "codex",
       args: ["exec", "--full-auto", "analyze this repository"],
       cwd: "/tmp/worktree",
+      preferPty: true,
     });
   });
 
@@ -112,6 +116,7 @@ describe("CLI agent argument adapters", () => {
       command: "claude",
       args: ["--print", "analyze this repository"],
       cwd: "/tmp/worktree",
+      preferPty: false,
     });
   });
 
