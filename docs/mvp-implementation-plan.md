@@ -14,13 +14,14 @@
 
 - Telegram Bot 命令面：`/start`、`/repos`、`/task`、`/status`、`/logs`、`/cancel`、`/submit`、`/merge`、`/push`、`/clear`、`/reset`、`/codex`、`/claude`
 - 启动时自动执行 `setMyCommands()` 注册命令菜单
-- `RepositoryCatalog` 扫描 `DEFAULT_WORKSPACE_SOURCE_PATH` 下的 Git 仓库供 `/repos` 选择
+- `RepositoryCatalog` 扫描 `DEFAULT_WORKSPACE_SOURCE_PATH` 直接子目录下的 Git 仓库供 `/repos` 选择
 - `RepositorySelectionStore` 保存用户当前选中的仓库
-- `TaskRunner` 负责排队、执行、取消、恢复和日志持久化
+- `TaskRunner` 负责排队、执行、取消、启动恢复和日志持久化；启动恢复时会重新入队历史 `queued` 任务，并把历史 `running` 任务标记为失败
 - `TaskPublisher` 负责任务分支提交、本地 `main` 合并、远端推送和 push 后 worktree 清理
 - 发布动作除文本命令外，还支持 Telegram 按钮触发；任务完成后按钮顺序固定为 `submit -> merge -> push`，其中 `/merge`、`/push` 需要先确认再执行
 - Git 仓库使用 `WorkspaceManager` 创建独立 `git worktree`
 - 非 Git 目标路径自动回退为目录复制
+- `/task` 和自由文本走默认 Agent（当前为 `codex`）；`/codex`、`/claude` 显式绑定对应 CLI
 - 任务输出持久化到 SQLite 的 `task_logs`，`/logs` 直接读取历史表
 - Codex 任务默认只在完成时回传最终结果；若未提取到最终结果，提示用户使用 `/logs` 查看原始日志
 - `node-pty` 不可用时，终端层保留 `child_process.spawn` 回退
@@ -31,15 +32,17 @@
 
 ### 1. 仓库选择不是“任意目录选择”
 
-- `/repos` 只展示 `DEFAULT_WORKSPACE_SOURCE_PATH` 下可识别的 Git 仓库
+- `/repos` 只展示 `DEFAULT_WORKSPACE_SOURCE_PATH` 直接子目录下可识别的 Git 仓库
+- `/repos` 实际只扫描 `DEFAULT_WORKSPACE_SOURCE_PATH` 的直接子目录
 - 因此，`/repos` 菜单本身不会列出普通目录
+- 如果 `DEFAULT_WORKSPACE_SOURCE_PATH` 本身就是某个仓库根目录，它也不会作为“自己”出现在 `/repos` 菜单里
 - 普通目录仍然可以作为任务目标，但需要走默认路径回退或 `workspace::prompt` 显式指定
 
 ### 2. 未选择仓库时的默认行为
 
 - `/task`、`/codex`、`/claude` 和两步输入模式在未选仓库时，不会强制报错
 - 如果用户没有先执行 `/repos`，任务会默认使用 `DEFAULT_WORKSPACE_SOURCE_PATH`
-- 这意味着 `DEFAULT_WORKSPACE_SOURCE_PATH` 可以是单仓库路径，也可以是一个手工指定的目录
+- 这意味着 `DEFAULT_WORKSPACE_SOURCE_PATH` 可以是单仓库路径，也可以是一个手工指定的目录；只是单仓库路径不会被 `/repos` 菜单直接列出
 
 ### 3. `workspace::prompt` 的优先级最高
 
@@ -57,15 +60,23 @@
 ### 5. 任务发布流是分步的
 
 - `/submit` 只在任务分支/worktree 上提交代码
-- `/submit` 默认作用于最近一条已完成任务；未显式传入 commit message 时，默认使用 `chore(task): submit <task_id>`
+- `/submit` 默认作用于最近一条仍保留 Git worktree 的可提交任务；未显式传入 commit message 时，默认使用 `chore(task): submit <task_id>`
 - `/merge` 只在主仓库上执行 `git merge --ff-only task/<task_id>`
 - `/merge` 默认作用于最近一条可 merge 的 Git 任务
 - `/push` 只执行 `git push origin main`
 - `/push` 默认作用于最近一条可 push 的 Git 任务，且要求任务分支已经进入本地 `main`、仓库存在 `origin`
 - `/push` 成功后自动删除该任务的本地 worktree，并清空任务记录中的 `workspacePath`
+- 只有 Git 任务会显示发布按钮并进入上述发布流；非 Git 任务不会出现 `/submit`、`/merge`、`/push` 按钮
+- 直接输入 `/merge`、`/push` 会立即执行；Telegram 按钮路径会先弹确认再执行
 - 主仓库不在 `main`、有未提交改动、任务 worktree 有未提交改动、任务分支不存在或无法 fast-forward 时，发布流程必须直接阻断
 
-### 6. 运行模式是“受管单实例”
+### 6. 重启恢复不是“断点续跑”
+
+- 进程重启后，历史 `queued` 任务会重新入队
+- 进程重启后，历史 `running` 任务不会继续执行，而是会被标记为 `failed`
+- 与这些任务关联的 workspace 会在恢复阶段被清理，避免残留 worktree
+
+### 7. 运行模式是“受管单实例”
 
 - 默认本地入口为 `pnpm dev`
 - 生产产物入口为 `pnpm build && pnpm start`

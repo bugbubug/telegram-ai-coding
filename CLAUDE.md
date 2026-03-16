@@ -25,12 +25,14 @@ Telegram Bot UI 统一管理本机 Codex CLI 和 Claude Code CLI 终端会话。
 - Agent 适配器通过 `AgentAdapter` 接口编程，新增 Agent 只需实现接口
 - 事件驱动：所有跨模块通信走 `EventBus`，类型约束 `EventMap`
 - 每个任务分配隔离 workspace；Git 仓库优先用 `git worktree`，非 Git 目录才复制
-- `/repos` 只列出 `DEFAULT_WORKSPACE_SOURCE_PATH` 下可识别的 Git 仓库
+- `/repos` 只列出 `DEFAULT_WORKSPACE_SOURCE_PATH` 直接子目录下可识别的 Git 仓库
 - 用户通常先通过 `/repos` 选择仓库，再创建 `/task`、`/codex`、`/claude` 任务；若未选择仓库，则回退到 `DEFAULT_WORKSPACE_SOURCE_PATH`
+- `/task` 和自由文本会走默认 Agent；当前默认 Agent 是 `codex`
 - `/task`、`/codex`、`/claude` 支持 `workspace::prompt` 显式覆盖目标路径
 - 同一 task id 重试前必须先清理残留 worktree 注册；任务失败、取消和重启恢复后必须回收 workspace；成功任务要保留 worktree 供后续提交
 - 任务发布采用分步流：`/submit` 只提交任务分支，`/merge` 只合并到本地 `main`，`/push` 只推送 `origin/main`；不做自动 rebase 或强制 merge
 - `/push` 成功后必须自动清理对应任务的本地 worktree，但默认保留任务分支
+- 非 Git 任务只保留复制出的 workspace 路径，不进入 `/submit`、`/merge`、`/push` 发布流
 - `task_logs` 持久化任务输出，`/logs` 读取历史日志而不是进程内缓存
 - `WORKSPACE_BASE_DIR` 必须位于源仓库目录外部，避免自我复制和路径污染
 - 本地 runtime 默认通过 `RUNTIME_HEALTH_HOST` / `RUNTIME_HEALTH_PORT` 提供 readiness 检查
@@ -41,12 +43,12 @@ Telegram Bot UI 统一管理本机 Codex CLI 和 Claude Code CLI 终端会话。
 - 内置命令：`/start`、`/repos`、`/task`、`/status`、`/logs`、`/cancel`、`/submit`、`/merge`、`/push`、`/clear`、`/reset`
 - 插件命令：`/codex`、`/claude`
 - 命令菜单由 `src/bot/bot.ts` 在启动时通过 `setMyCommands()` 注册
-- `/task`、`/codex`、`/claude` 的命令格式均支持 `[workspace::]prompt`
+- `/task`、`/codex`、`/claude` 的命令格式均支持 `[workspace::]prompt`；`/task` 和自由文本默认走 `codex`
 - `/status` 需要展示当前已选仓库、活跃任务、worktree 路径、最近错误
-- Codex 任务默认不向 Telegram 流式推送中间过程，只在完成时返回最终结果；成功时还要附带 `task_id`、分支名、worktree 路径和 `/submit`、`/merge`、`/push` 提示，提取失败时明确引导使用 `/logs`
-- `/submit`、`/merge`、`/push` 的默认目标是当前用户最近一条可执行任务；`/submit` 允许追加 commit message，省略时默认使用 `chore(task): submit <task_id>`
+- Codex 任务默认不向 Telegram 流式推送中间过程，只在完成时返回最终结果；成功的 Git 任务还要附带 `task_id`、分支名、worktree 路径和 `/submit`、`/merge`、`/push` 提示，提取失败时明确引导使用 `/logs`
+- `/submit`、`/merge`、`/push` 的默认目标是当前用户最近一条可执行的 Git 任务；`/submit` 只会选择仍保留 Git worktree 的已完成任务，并允许追加 commit message，省略时默认使用 `chore(task): submit <task_id>`
 - `/submit`、`/merge`、`/push` 校验失败时必须明确返回阻断原因；`/push` 成功后只清理本地 worktree，不自动删除任务分支
-- 任务完成后的 Telegram 发布按钮顺序必须是 `submit -> merge -> push`；`merge`、`push` 除文本命令外，还应提供可点击按钮，并在真正执行前增加确认步骤
+- 任务完成后的 Telegram 发布按钮顺序必须是 `submit -> merge -> push`；`merge`、`push` 除文本命令外，还应提供 Telegram 可点击按钮；文本命令直接执行，按钮路径在真正执行前增加确认步骤
 - `/clear`、`/clear all`、`/reset` 会清理消息记录、仓库选择和任务上下文，修改这些行为时必须补测试
 - 运行脚本：`pnpm dev`（受管后台启动）、`pnpm dev:watch`（裸 watch 调试）、`pnpm stop`、`pnpm status`
 
@@ -83,18 +85,18 @@ src/
 
 ## 工作流约束
 
-1. 用户先选仓库：`RepositoryCatalog` 扫描 `DEFAULT_WORKSPACE_SOURCE_PATH`
+1. 用户先选仓库：`RepositoryCatalog` 扫描 `DEFAULT_WORKSPACE_SOURCE_PATH` 的直接子目录；如果该路径本身就是仓库根目录，它不会出现在 `/repos` 菜单里
 2. `RepositorySelectionStore` 记录 `userId -> repoPath`
 3. `/repos` 仅返回 Git 仓库；未选择仓库时，任务默认落到 `DEFAULT_WORKSPACE_SOURCE_PATH`
 4. 创建任务时，`TaskRunner` 调用 `WorkspaceManager.prepareWorkspace()`
 5. Git 仓库走 `git worktree add`，worktree 根位于 `WORKSPACE_BASE_DIR`
 6. 非 Git 目标路径回退为目录复制
 7. Agent 在隔离目录运行，输出写入 `task_logs`
-8. 成功任务保留 worktree，并向用户返回 `task_id`、分支名、worktree 路径以及 `/submit <task_id>`、`/merge <task_id>`、`/push <task_id>` 下一步提示
+8. 成功的 Git 任务保留 worktree，并向用户返回 `task_id`、分支名、worktree 路径以及 `/submit <task_id>`、`/merge <task_id>`、`/push <task_id>` 下一步提示；成功的非 Git 任务只保留 workspace 路径
 9. Codex 任务只在完成时回传最终结果；若未提取到最终结果，必须引导用户使用 `/logs <task_id>` 查看原始日志
 10. `/merge` 固定执行 `git merge --ff-only task/<task_id>`；主仓库不在 `main`、有未提交改动、任务 worktree 有脏改动或无法 fast-forward 时必须阻断
 11. `/push` 固定执行 `git push origin main`；只有任务分支已进入本地 `main` 且仓库存在 `origin` 时才允许执行，push 成功后清理任务 worktree 并清空持久化的 `workspacePath`，失败时不得提前清理
-12. 任务取消、失败或重启恢复后，状态和错误信息持久化到 SQLite，并清理对应 worktree / workspace
+12. 启动恢复时，历史 `queued` 任务会重新入队，历史 `running` 任务会被标记为失败并清理 workspace；普通取消/失败同样会清理对应 worktree / workspace，状态和错误信息持久化到 SQLite
 
 ## 本地运行约束
 
