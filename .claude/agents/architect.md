@@ -16,6 +16,8 @@ model: opus
 7. 检查 `/repos` 是否只暴露 `DEFAULT_WORKSPACE_SOURCE_PATH` 直接子目录中的 Git 仓库，以及命令文档是否说明默认路径回退和 `workspace::prompt`
 8. 检查 workspace 是否优先使用 `git worktree`，且 `WORKSPACE_BASE_DIR` 不在源仓库内部
 9. 检查 `task_logs`、命令菜单、`/clear` / `/reset` 等运行时行为是否有对应文档闭环
+10. 检查 `data/message-history.json`、`RepositorySelectionStore`、`PendingTaskInputStore` 的持久化边界是否与文档一致
+11. 检查 `/logs`、`/cancel` 的默认目标，以及 `/submit` 自定义 commit message 需要显式 `task_id` 的语义是否有文档闭环
 
 输出格式：
 - 违规清单（严重性：高/中/低）

@@ -23,10 +23,13 @@
 - 非 Git 目标路径自动回退为目录复制
 - `/task` 和自由文本走默认 Agent（当前为 `codex`）；`/codex`、`/claude` 显式绑定对应 CLI
 - 任务输出持久化到 SQLite 的 `task_logs`，`/logs` 直接读取历史表
+- `/logs` 省略 `task_id` 时读取当前用户最近一条任务；`/cancel` 省略 `task_id` 时取消最近一条活跃任务
 - Codex 任务默认只在完成时回传最终结果；若未提取到最终结果，提示用户使用 `/logs` 查看原始日志
 - `node-pty` 不可用时，终端层保留 `child_process.spawn` 回退
+- `MessageHistoryStore` 会把机器人消息 id 持久化到 `data/message-history.json`；`RepositorySelectionStore` 和 `PendingTaskInputStore` 仅保存在进程内存中
 - 本地运行采用受管单实例模式：PID、日志和健康状态写入 `.runtime/telegram-ai-manager/local/`
 - Redis 不可用时，任务队列自动降级为内存模式
+- `plugin-mcp` 当前仍为预留插件，不注册用户可见命令
 
 ## 关键行为边界
 
@@ -70,13 +73,25 @@
 - 直接输入 `/merge`、`/push` 会立即执行；Telegram 按钮路径会先弹确认再执行
 - 主仓库不在 `main`、有未提交改动、任务 worktree 有未提交改动、任务分支不存在或无法 fast-forward 时，发布流程必须直接阻断
 
-### 6. 重启恢复不是“断点续跑”
+### 6. `/submit` 的默认任务与提交信息绑定
+
+- `/submit` 省略 `task_id` 时，会自动选择最近一条可提交的 Git 任务
+- 但当前实现无法在省略 `task_id` 的同时单独传入自定义 commit message
+- 若要自定义 commit message，必须使用 `/submit <task_id> <message>`
+
+### 7. 会话态与持久化边界不同
+
+- 机器人消息历史会持久化到 `data/message-history.json`
+- 当前已选仓库和两步输入的 Agent 状态只保存在进程内存中
+- 因此进程重启后需要重新选择仓库 / 重新发起两步输入，但 `/clear`、`/reset` 仍可能继续清理此前已跟踪的机器人消息
+
+### 8. 重启恢复不是“断点续跑”
 
 - 进程重启后，历史 `queued` 任务会重新入队
 - 进程重启后，历史 `running` 任务不会继续执行，而是会被标记为 `failed`
 - 与这些任务关联的 workspace 会在恢复阶段被清理，避免残留 worktree
 
-### 7. 运行模式是“受管单实例”
+### 9. 运行模式是“受管单实例”
 
 - 默认本地入口为 `pnpm dev`
 - 生产产物入口为 `pnpm build && pnpm start`
@@ -86,6 +101,7 @@
 ## 当前运行时落点
 
 - SQLite 数据库：`data/tasks.db`
+- 机器人消息历史：`data/message-history.json`
 - 运行时根目录：`.runtime/telegram-ai-manager/local/`
 - PID 文件：`.runtime/telegram-ai-manager/local/pids/app.pid`
 - 应用日志：`.runtime/telegram-ai-manager/local/logs/app.log`
@@ -98,6 +114,7 @@
 - 所有环境变量由 `src/config/index.ts` 的 zod schema 校验
 - `REDIS_URL` 当前属于必填配置项
 - 即使配置了 `REDIS_URL`，当 Redis 服务不可用时，队列仍会自动降级为内存模式
+- `GIT_BRANCH_ISOLATION` 控制失败/取消/恢复阶段临时 Git workspace 清理时是否顺带删除 `task/<task_id>` 分支；`/push` 成功后的 retained worktree 清理仍默认保留分支
 - `TELEGRAM_ALLOWED_USERS` 必须是逗号分隔的数字 user id 列表
 
 ## 推荐验证清单
@@ -107,6 +124,7 @@
 - 检查 `README.md`、`CLAUDE.md`、`AGENTS.md`、`.claude/` 与本文件描述是否一致
 - 检查命令清单、运行方式、仓库选择流程、workspace 生命周期是否写法一致
 - 检查 `/submit`、`/merge`、`/push` 的默认目标选择、阻断条件和 push 后清理语义是否写法一致
+- 检查 `/submit` 的 commit message 语法边界、`/logs` / `/cancel` 的默认目标和会话态持久化边界是否写法一致
 - 检查 Codex “只回最终结果”与 `/logs` 回退说明是否写法一致
 
 ### 行为改动后
@@ -121,6 +139,7 @@
 - `/repos` 的扫描范围和仓库选择逻辑
 - `workspace::prompt` 解析规则或默认路径回退逻辑
 - `git worktree` / 非 Git 回退策略
+- `data/message-history.json`、`RepositorySelectionStore` / `PendingTaskInputStore` 的持久化边界
 - SQLite 路径、runtime 路径、PID / 日志 / 健康端口
 - Redis 降级策略、任务生命周期或日志持久化方式
 - `/submit`、`/merge`、`/push` 的发布语义与 worktree 清理规则
