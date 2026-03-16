@@ -3,6 +3,48 @@ import { describe, expect, it, vi } from "vitest";
 import { registerCallbackQueryHandler } from "../../../src/bot/handlers/callback-query.js";
 
 describe("registerCallbackQueryHandler", () => {
+  it("submits a task directly from the publish button and renders a merge button", async () => {
+    const on = vi.fn();
+    const bot = { on } as never;
+    const submitTask = vi.fn(() =>
+      Promise.resolve({
+        task: {
+          id: "task-0",
+          workspacePath: "/tmp/task-0",
+        },
+        branchName: "task/task-0",
+        commitHash: "abc000",
+        committed: true,
+      }),
+    );
+
+    registerCallbackQueryHandler(
+      bot,
+      { getLogs: vi.fn() } as never,
+      { submitTask, mergeTask: vi.fn(), pushTask: vi.fn() } as never,
+      { cancelTask: vi.fn() } as never,
+      {} as never,
+      {} as never,
+    );
+
+    const handler = on.mock.calls[0]?.[1] as (ctx: unknown) => Promise<void>;
+    const answerCallbackQuery = vi.fn(() => Promise.resolve());
+    const editMessageText = vi.fn(() => Promise.resolve());
+
+    await handler({
+      from: { id: 1 },
+      callbackQuery: { data: "publish:run:submit:task-0" },
+      answerCallbackQuery,
+      editMessageText,
+    });
+
+    expect(submitTask).toHaveBeenCalledWith("task-0", 1);
+    expect(editMessageText).toHaveBeenCalledWith(
+      "已提交本地分支 task-0\n分支：task/task-0\n提交：abc000\nWorktree：/tmp/task-0\n下一步：可点击下方按钮继续合并",
+      expect.any(Object),
+    );
+  });
+
   it("shows a confirmation prompt before merge", async () => {
     const on = vi.fn();
     const bot = { on } as never;
@@ -10,7 +52,7 @@ describe("registerCallbackQueryHandler", () => {
     registerCallbackQueryHandler(
       bot,
       { getLogs: vi.fn() } as never,
-      { mergeTask: vi.fn(), pushTask: vi.fn() } as never,
+      { submitTask: vi.fn(), mergeTask: vi.fn(), pushTask: vi.fn() } as never,
       { cancelTask: vi.fn() } as never,
       {} as never,
       {} as never,
@@ -48,7 +90,7 @@ describe("registerCallbackQueryHandler", () => {
     registerCallbackQueryHandler(
       bot,
       { getLogs: vi.fn() } as never,
-      { mergeTask, pushTask: vi.fn() } as never,
+      { submitTask: vi.fn(), mergeTask, pushTask: vi.fn() } as never,
       { cancelTask: vi.fn() } as never,
       {} as never,
       {} as never,
@@ -79,7 +121,7 @@ describe("registerCallbackQueryHandler", () => {
     registerCallbackQueryHandler(
       bot,
       { getLogs: vi.fn() } as never,
-      { mergeTask: vi.fn(), pushTask: vi.fn() } as never,
+      { submitTask: vi.fn(), mergeTask: vi.fn(), pushTask: vi.fn() } as never,
       { cancelTask: vi.fn() } as never,
       {} as never,
       {} as never,

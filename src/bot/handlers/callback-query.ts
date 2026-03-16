@@ -10,6 +10,7 @@ import {
   formatActionConfirmationPrompt,
   formatMergeReply,
   formatPushReply,
+  formatSubmitReply,
 } from "../commands/publish-command-utils.js";
 import { formatLogsReply, replyChunked } from "../commands/task.js";
 import type { RepositorySelectionStore } from "../repository-selection-store.js";
@@ -48,6 +49,22 @@ export const registerCallbackQueryHandler = (
       await ctx.answerCallbackQuery();
       await ctx.reply(formatActionConfirmationPrompt(action, taskId), {
         reply_markup: buildConfirmationKeyboard(action, taskId),
+      });
+      return;
+    }
+
+    if (data.startsWith("publish:run:submit:")) {
+      const taskId = data.slice("publish:run:submit:".length);
+      if (!taskId) {
+        await ctx.answerCallbackQuery({ text: "无效操作" });
+        return;
+      }
+
+      const userId = ctx.from?.id ?? 0;
+      await ctx.answerCallbackQuery({ text: "正在提交..." });
+      const result = await taskPublisher.submitTask(taskId, userId);
+      await ctx.editMessageText(formatSubmitReply(result), {
+        reply_markup: buildActionKeyboard("merge", taskId),
       });
       return;
     }

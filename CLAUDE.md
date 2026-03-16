@@ -46,7 +46,7 @@ Telegram Bot UI 统一管理本机 Codex CLI 和 Claude Code CLI 终端会话。
 - Codex 任务默认不向 Telegram 流式推送中间过程，只在完成时返回最终结果；成功时还要附带 `task_id`、分支名、worktree 路径和 `/submit`、`/merge`、`/push` 提示，提取失败时明确引导使用 `/logs`
 - `/submit`、`/merge`、`/push` 的默认目标是当前用户最近一条可执行任务；`/submit` 允许追加 commit message，省略时默认使用 `chore(task): submit <task_id>`
 - `/submit`、`/merge`、`/push` 校验失败时必须明确返回阻断原因；`/push` 成功后只清理本地 worktree，不自动删除任务分支
-- `/merge`、`/push` 除文本命令外，还应提供 Telegram 可点击按钮，并在真正执行前增加确认步骤
+- 任务完成后的 Telegram 发布按钮顺序必须是 `submit -> merge -> push`；`merge`、`push` 除文本命令外，还应提供可点击按钮，并在真正执行前增加确认步骤
 - `/clear`、`/clear all`、`/reset` 会清理消息记录、仓库选择和任务上下文，修改这些行为时必须补测试
 - 运行脚本：`pnpm dev`（受管后台启动）、`pnpm dev:watch`（裸 watch 调试）、`pnpm stop`、`pnpm status`
 

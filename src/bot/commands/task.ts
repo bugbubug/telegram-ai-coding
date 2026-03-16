@@ -235,8 +235,7 @@ const sendTaskActionButtons = async (ctx: Context, task: Task): Promise<void> =>
       reply_markup: new InlineKeyboard()
         .text("查看日志", `logs:${task.id}`)
         .row()
-        .text("合并到 main", `publish:prompt:merge:${task.id}`)
-        .text("推送到 origin/main", `publish:prompt:push:${task.id}`),
+        .text("提交分支", `publish:run:submit:${task.id}`),
     });
   } catch {
     // Non-git workspace has no publish actions.

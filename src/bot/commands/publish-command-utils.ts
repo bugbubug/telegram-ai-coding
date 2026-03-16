@@ -96,12 +96,16 @@ export const formatActionConfirmationPrompt = (
     : `确认要把本地 main 推送到 origin/main，并在成功后清理任务 ${taskId} 的本地 worktree 吗？`;
 
 export const buildActionKeyboard = (
-  action: "merge" | "push",
+  action: "submit" | "merge" | "push",
   taskId: string,
 ): InlineKeyboard =>
   new InlineKeyboard().text(
-    action === "merge" ? "合并到 main" : "推送到 origin/main",
-    `publish:prompt:${action}:${taskId}`,
+    action === "submit"
+      ? "提交分支"
+      : action === "merge"
+        ? "合并到 main"
+        : "推送到 origin/main",
+    action === "submit" ? `publish:run:submit:${taskId}` : `publish:prompt:${action}:${taskId}`,
   );
 
 export const buildConfirmationKeyboard = (
